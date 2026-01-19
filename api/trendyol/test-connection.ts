@@ -1,6 +1,5 @@
 
 import { IncomingMessage, ServerResponse } from 'http';
-import { requestTrendyol } from '../../lib/trendyol-backend';
 
 // Helper to ensure JSON response
 const sendJson = (res: ServerResponse, status: number, data: any) => {
@@ -12,8 +11,6 @@ const sendJson = (res: ServerResponse, status: number, data: any) => {
 };
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-    console.log("TEST-CONNECTION STARTED");
-
     // CORS headers
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -30,81 +27,90 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     try {
-        console.log("ENV CHECK", {
-            supplierId: process.env.TRENDYOL_SUPPLIER_ID, // Just checking if they exist in env, though we usually get them from body
-            hasGlobalKey: !!process.env.TRENDYOL_API_KEY,
-            nodeEnv: process.env.NODE_ENV
-        });
+        console.log("TEST-CONNECTION: Start");
 
-        // Handle body parsing manually to ensure we don't crash before logic
-        let body = '';
-        if (req.method === 'POST') {
-            req.on('data', chunk => {
-                body += chunk.toString();
-            });
-            await new Promise((resolve) => req.on('end', resolve));
+        if (req.method !== 'POST') {
+            return sendJson(res, 405, { ok: false, message: 'Method Not Allowed' });
         }
 
-        // TEMPORARY SHIELD: Return OK immediately to fix crash
-        return sendJson(res, 200, {
-            ok: true,
-            message: "Backend ayakta, env ok (GÜVENLİ MOD)",
-            note: "Trendyol isteği geçici olarak devre dışı bırakıldı."
-        });
+        // Read Body
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        await new Promise((resolve) => req.on('end', resolve));
 
-        /* COMMENTED OUT FOR DEBUGGING
         let data;
         try {
             data = JSON.parse(body);
         } catch (e) {
             return sendJson(res, 400, { ok: false, message: 'Invalid JSON request body' });
         }
-    
-        const { supplierId, apiKey, apiSecret, integrationReferenceCode, token } = data;
-    
+
+        const { supplierId, apiKey, apiSecret } = data;
+
         if (!supplierId || !apiKey || !apiSecret) {
-           return sendJson(res, 400, { ok: false, message: "Eksik bilgi: supplierId, apiKey ve apiSecret zorunludur." });
+            return sendJson(res, 400, { ok: false, message: "Eksik bilgi: supplierId, apiKey, apiSecret" });
         }
-    
-        // Endpoint selection
-        const endpoint = `/suppliers/${supplierId}/addresses`;
-    
-        const result = await requestTrendyol(endpoint, 'GET', {
-          supplierId,
-          apiKey,
-          apiSecret,
-          integrationReferenceCode,
-          token
-        });
-    
-        // Construct user-facing response
-        const payload: any = {
-          ok: result.ok,
-          status: result.status,
-          usedEndpoint: `https://api.trendyol.com/sapigw${endpoint}`,
-          supplierIdSent: supplierId,
-          authUserSample: apiKey ? apiKey.substring(0, 4) + '***' : 'N/A',
-          message: result.message || (result.ok ? "Bağlantı başarılı (Adres listesi alındı)" : "Hata detayları için alta bakınız")
-        };
-    
-        if (!result.ok) {
-            // Safe truncated body preview
-            payload.detail = result.rawBody ? result.rawBody.substring(0, 300) : "No body returned";
-            
-            if (result.status === 403) {
-                 payload.message = "403 Forbidden: Yetki Hatası.";
+
+        // 1. Auth Header
+        const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+
+        // 2. Endpoint: suppliers/{id}
+        const url = `https://api.trendyol.com/sapigw/suppliers/${supplierId}`;
+
+        console.log(`FETCHING: ${url}`);
+
+        // 3. Strict Fetch
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'User-Agent': 'VizyonExcel/1.0',
+                'Content-Type': 'application/json'
             }
+        });
+
+        const text = await response.text();
+        let jsonBody: any = null;
+        try {
+            if (text && text.trim().length > 0) {
+                jsonBody = JSON.parse(text);
+            }
+        } catch (e) {
+            jsonBody = null;
         }
-    
+
+        // 4 & 5. Construct Response
+        const payload: any = {
+            ok: response.ok,
+            status: response.status,
+            requestId: response.headers.get('x-request-id') || undefined,
+        };
+
+        if (jsonBody) {
+            payload.body = jsonBody;
+            if (response.ok) {
+                payload.message = "Bağlantı başarılı: Satıcı bilgileri alındı.";
+            } else {
+                payload.message = jsonBody.message || "Trendyol API Hatası";
+            }
+        } else {
+            // Non-JSON Response (HTML or raw text)
+            payload.ok = false;
+            payload.source = "trendyol"; // Marking source
+            payload.raw = text.substring(0, 1000); // Send first 1000 chars
+            payload.message = `Trendyol JSON dönmedi (${response.status})`;
+        }
+
+        // Return to frontend with 200 OK so frontend parses JSON successfully
+        // The actual API status is in payload.status
         sendJson(res, 200, payload);
-        */
 
     } catch (error: any) {
-        console.error("TEST-CONNECTION CRASH", error);
+        console.error("TEST-CONNECTION ERROR:", error);
         sendJson(res, 500, {
             ok: false,
-            message: "Backend crash",
-            detail: error?.message || String(error)
+            message: "Sunucu hatası",
+            detail: error.message || String(error)
         });
     }
 }

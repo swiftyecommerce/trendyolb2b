@@ -42,11 +42,25 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         }
 
         const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+        const endpoint = `https://api.trendyol.com/sapigw/suppliers/${supplierId}/addresses`;
+
+        // 1) Server-side Request Log
+        console.log("--- TRENDYOL API REQUEST DEBUG ---");
+        console.log("URL:", endpoint);
+        console.log("Method:", "GET");
+        console.log("Headers (Keys):", Object.keys({
+            'Authorization': 'HIDDEN',
+            'User-Agent': `${supplierId} - SelfIntegration`
+        }));
+        console.log("Auth Header Exists:", !!auth);
+        console.log("Supplier ID:", supplierId);
+        console.log("----------------------------------");
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
 
         try {
-            const trendyolRes = await fetch(`https://api.trendyol.com/sapigw/suppliers/${supplierId}/addresses`, {
+            const trendyolRes = await fetch(endpoint, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Basic ${auth}`,
@@ -55,6 +69,20 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
+
+            // 2) Server-side Response Log
+            console.log("--- TRENDYOL API RESPONSE DEBUG ---");
+            console.log("Status:", trendyolRes.status);
+            console.log("Status Text:", trendyolRes.statusText);
+
+            let responseBody = null;
+            try {
+                responseBody = await trendyolRes.json();
+                console.log("Body:", JSON.stringify(responseBody).slice(0, 200) + "...");
+            } catch (e) {
+                console.log("Body: (Non-JSON or Empty)");
+            }
+            console.log("-----------------------------------");
 
             if (trendyolRes.ok) {
                 res.statusCode = 200;
@@ -65,13 +93,30 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                     status: 200
                 }));
             } else {
+                // 3) Enrich JSON with debug info if 403 or error
+                const isForbidden = trendyolRes.status === 403;
+                const errorMessage = isForbidden
+                    ? "Trendyol API 403 Forbidden. Yetki veya endpoint sorunu."
+                    : `Trendyol API hatası: ${trendyolRes.status} - ${trendyolRes.statusText || 'Bilinmeyen Hata'}`;
+
+                const payload: any = {
+                    ok: false,
+                    message: errorMessage,
+                    status: trendyolRes.status
+                };
+
+                if (isForbidden) {
+                    payload.debug = {
+                        status: 403,
+                        endpoint: endpoint,
+                        authHeaderExists: !!auth,
+                        responseBody: responseBody
+                    };
+                }
+
                 res.statusCode = 200;
                 res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({
-                    ok: false,
-                    message: `Trendyol API hatası: ${trendyolRes.status} - ${trendyolRes.statusText || 'Bilinmeyen Hata'}`,
-                    status: trendyolRes.status
-                }));
+                res.end(JSON.stringify(payload));
             }
 
         } catch (fetchError: any) {
@@ -87,6 +132,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         }
 
     } catch (error) {
+        console.error("Critical Error in test-connection:", error);
         res.statusCode = 500;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({

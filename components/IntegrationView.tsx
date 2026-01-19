@@ -82,6 +82,7 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
           success: false,
           message: res?.message || "Bağlantı Başarısız",
           detail: `Status: ${res?.status}`,
+          rawBodyPreview: res?.rawBodyPreview,
           debug: res
         } as any);
       }
@@ -187,14 +188,29 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
               </div>
 
               {testResult && (
-                <div className={`p-6 rounded-2xl border animate-in slide-in-from-top-4 duration-300 flex gap-4 ${testResult.success ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-rose-50 border-rose-100 text-rose-800'}`}>
-                  <div className="mt-1">
-                    {testResult.success ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
+                <div className={`p-6 rounded-2xl border animate-in slide-in-from-top-4 duration-300 flex flex-col gap-4 ${testResult.success ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 'bg-rose-50 border-rose-100 text-rose-800'}`}>
+                  <div className="flex gap-4">
+                    <div className="mt-1">
+                      {testResult.success ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
+                    </div>
+                    <div>
+                      <p className="text-sm font-black uppercase tracking-tight leading-none mb-1">{testResult.message}</p>
+                      <p className="text-xs font-medium opacity-80">{testResult.detail}</p>
+                      {(testResult as any).rawBodyPreview && (
+                        <p className="mt-2 text-[10px] font-mono opacity-70 bg-black/5 p-1.5 rounded">
+                          Detay: {(testResult as any).rawBodyPreview}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-black uppercase tracking-tight leading-none mb-1">{testResult.message}</p>
-                    <p className="text-xs font-medium opacity-80">{testResult.detail}</p>
-                  </div>
+
+                  {/* Debug Info - Only in Development */}
+                  {import.meta.env.DEV && (testResult as any).debug && (
+                    <div className="mt-2 p-3 bg-black/5 rounded-xl text-[10px] font-mono whitespace-pre-wrap overflow-auto max-h-40 border border-black/5">
+                      <strong>DEBUG INFO (Dev Only):</strong>
+                      {JSON.stringify((testResult as any).debug, null, 2)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -59,52 +59,53 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             });
             clearTimeout(timeoutId);
 
-            let responseMessage = "";
+            let responseText = "";
+            let responseJson: any = null;
+            let isJson = false;
 
-            // Try to parse JSON body
+            // Try reading as text first to capture everything safely
+            responseText = await trendyolRes.text();
+
             try {
-                const jsonBody = await trendyolRes.json();
-                // If Trendyol returns a message or valid json, stringify it lightly or grab message
-                if (jsonBody && typeof jsonBody === 'object') {
-                    // Common Trendyol error format often has 'errors' array or 'message'
-                    if (jsonBody.message) responseMessage = jsonBody.message;
-                    else if (jsonBody.errors && Array.isArray(jsonBody.errors)) responseMessage = JSON.stringify(jsonBody.errors);
-                    else responseMessage = "Trendyol'dan JSON yanıt döndü (Detaylar debug alanında)";
-                } else {
-                    responseMessage = String(jsonBody);
-                }
+                responseJson = JSON.parse(responseText);
+                isJson = true;
             } catch (e) {
-                // Text parsing if JSON fails
-                try {
-                    const textBody = await trendyolRes.text(); // fetch body might be consumed already if json() failed? 
-                    // Actually if json() fails, body is consumed. We can't re-read easily in standard fetch polyfills unless we cloned. 
-                    // But typically json() throws on invalid json.
-                    // In Node fetch, we might not be able to read again. 
-                    // Let's assume if json() failed, we can't read text easily without cloning first. 
-                    // Or we accept we can't read body. 
-                    // However, let's try to handle it safer by cloning if possible or just catching.
-                    // For Vercel Edge/Node environment, simpler is safer:
-                    responseMessage = `Raw response (JSON parse failed) - Status: ${trendyolRes.status}`;
-                } catch (textError) {
-                    responseMessage = "Response body okunamadı.";
-                }
+                isJson = false;
             }
 
-            // Refined Logic: If successful (200), we probably want a success message
-            if (trendyolRes.ok) {
-                responseMessage = responseMessage || "Bağlantı başarılı, ürün listesi çekildi.";
-            } else {
-                responseMessage = responseMessage || `Trendyol API Hatası: ${trendyolRes.status}`;
-            }
-
-            const payload = {
+            const payload: any = {
                 ok: trendyolRes.ok,
                 status: trendyolRes.status,
                 usedEndpoint: endpoint,
                 supplierIdSent: supplierId,
-                authUserSample: apiKey ? apiKey.substring(0, 4) + '***' : 'N/A',
-                message: responseMessage
+                authUserSample: apiKey ? apiKey.substring(0, 4) + '***' : 'N/A'
             };
+
+            if (trendyolRes.ok) {
+                payload.message = "Bağlantı başarılı, ürün listesi çekildi.";
+                if (isJson && responseJson.content) {
+                    payload.message += ` (${responseJson.content.length} ürün bulundu)`;
+                }
+            } else {
+                if (trendyolRes.status === 403) {
+                    payload.message = "Trendyol API 403 Forbidden. Lütfen Trendyol panelindeki Satıcı ID, API Key ve API Secret bilgilerini ve entegrasyon yetkilerini kontrol edin.";
+                    if (!isJson) {
+                        payload.rawBodyPreview = responseText.substring(0, 200) || "Boş gövde";
+                    } else {
+                        payload.message += ` (Detay: ${JSON.stringify(responseJson)})`;
+                    }
+                } else {
+                    // General error logic
+                    if (isJson && responseJson.message) {
+                        payload.message = `Trendyol Hatası: ${responseJson.message}`;
+                    } else if (isJson && responseJson.errors) {
+                        payload.message = `Trendyol Hataları: ${JSON.stringify(responseJson.errors)}`;
+                    } else {
+                        payload.message = `Trendyol API Hatası: ${trendyolRes.status}`;
+                        payload.rawBodyPreview = responseText.substring(0, 200);
+                    }
+                }
+            }
 
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');

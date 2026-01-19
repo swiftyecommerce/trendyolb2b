@@ -2,6 +2,15 @@
 import { IncomingMessage, ServerResponse } from 'http';
 import { requestTrendyol } from '../../lib/trendyol-backend';
 
+// Helper to ensure JSON response
+const sendJson = (res: ServerResponse, status: number, data: any) => {
+    if (!res.headersSent) {
+        res.statusCode = status;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(data));
+    }
+};
+
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
     // CORS headers
     res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -18,14 +27,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         return;
     }
 
-    if (req.method !== 'POST') {
-        res.statusCode = 405;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: false, message: 'Method Not Allowed' }));
-        return;
-    }
-
     try {
+        if (req.method !== 'POST') {
+            return sendJson(res, 405, { ok: false, message: 'Method Not Allowed' });
+        }
+
         let body = '';
         req.on('data', chunk => {
             body += chunk.toString();
@@ -33,21 +39,20 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
         await new Promise((resolve) => req.on('end', resolve));
 
-        const data = JSON.parse(body);
+        let data;
+        try {
+            data = JSON.parse(body);
+        } catch (e) {
+            return sendJson(res, 400, { ok: false, message: 'Invalid JSON request body' });
+        }
+
         const { supplierId, apiKey, apiSecret, integrationReferenceCode, token } = data;
 
         if (!supplierId || !apiKey || !apiSecret) {
-            res.statusCode = 400;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ ok: false, message: "Eksik bilgi: supplierId, apiKey ve apiSecret zorunludur." }));
-            return;
+            return sendJson(res, 400, { ok: false, message: "Eksik bilgi: supplierId, apiKey ve apiSecret zorunludur." });
         }
 
-        // Use "addresses" endpoint as it's safe query often used for pinging valid credentials
-        // Note: User asked for "harmless GET like cargo or brands". 
-        // "suppliers/{id}/addresses" is specific to the supplier, verifying the credentials belong to that supplier.
-        // "shipment-providers" is another option but might not need supplierId in path.
-        // Let's use `suppliers/${supplierId}/addresses` as intended connection test.
+        // Endpoint selection
         const endpoint = `/suppliers/${supplierId}/addresses`;
 
         const result = await requestTrendyol(endpoint, 'GET', {
@@ -77,17 +82,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             }
         }
 
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify(payload));
+        sendJson(res, 200, payload);
 
-    } catch (error) {
-        console.error("Test function error:", error);
-        res.statusCode = 500;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({
+    } catch (error: any) {
+        console.error("Critical Test function error:", error);
+        // Bulletproof catch to always return JSON
+        sendJson(res, 500, {
             ok: false,
-            message: "Test sırasında sunucu içi hata oluştu."
-        }));
+            message: "Test sırasında sunucu içi hata oluştu.",
+            detail: error.message || String(error)
+        });
     }
 }

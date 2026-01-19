@@ -72,9 +72,35 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
         }),
       });
 
-      const res = await response.json();
+      // Safe Parsing Logic
+      const text = await response.text();
+      let res;
+      try {
+        res = JSON.parse(text);
+      } catch (e) {
+        // If backend didn't return JSON (e.g. Vercel error page 500/404/504)
+        console.error("JSON PARSE ERROR. Raw text:", text);
+        setTestResult({
+          success: false,
+          message: "Backend Yanıt Formatı Hatası",
+          detail: "Sunucu JSON döndürmedi.",
+          rawBodyPreview: text.substring(0, 300)
+        });
+        return;
+      }
 
-      if (res && res.ok) {
+      // Check if backend returned valid object
+      if (!res || typeof res !== 'object') {
+        setTestResult({
+          success: false,
+          message: "Geçersiz Yanıt",
+          detail: "Sunucu boş veya bozuk veri döndürdü.",
+          rawBodyPreview: String(text)
+        });
+        return;
+      }
+
+      if (res.ok) {
         setTestResult({
           success: true,
           message: res.message || "Bağlantı Başarılı",
@@ -84,16 +110,16 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
       } else {
         setTestResult({
           success: false,
-          message: res?.message || "Bağlantı Başarısız",
-          detail: res?.detail || `Status: ${res?.status}`,
+          message: res.message || "Bağlantı Başarısız",
+          detail: res.detail || `Status: ${res.status}`,
           debug: res
         } as any);
       }
     } catch (e: any) {
-      console.error("Test error:", e);
+      console.error("Network/Client Error:", e);
       setTestResult({
         success: false,
-        message: "Bağlantı Hatası",
+        message: "Ağ veya İstemci Hatası",
         detail: getErrorMessage(e)
       });
     } finally {

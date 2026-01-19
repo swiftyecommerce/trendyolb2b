@@ -11,7 +11,7 @@ interface DashboardProps {
   onAddToCart: (product: Product, qty?: number) => void;
   onFileUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onUpdateProducts: (products: Product[]) => void;
-  onNavigateToTab?: (tab: AppTab) => void; 
+  onNavigateToTab?: (tab: AppTab) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCart, onFileUpload, onUpdateProducts, onNavigateToTab }) => {
@@ -24,7 +24,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
   const [generatedActions, setGeneratedActions] = useState<AIAction[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [aiQuotaExhausted, setAiQuotaExhausted] = useState(false);
-  
+
   // Ping State
   const [pinging, setPinging] = useState(false);
   const [pingResult, setPingResult] = useState<string | null>(null);
@@ -41,11 +41,17 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
     setPinging(true);
     setPingResult(null);
     try {
-      // Relative path kullanımı 'Failed to fetch' hatalarını önler.
       const res = await fetch("/api/ping");
+
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Ping hatası: Sunucudan JSON yerine farklı bir içerik geldi.");
+      }
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       const data = await res.json();
-      setPingResult(`OK: ${data.message}`);
+      setPingResult(`OK: ${data.message} (${new Date(data.ts).toLocaleTimeString()})`);
     } catch (e: any) {
       setPingResult(`HATA: ${e.message}`);
     } finally {
@@ -56,10 +62,10 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
 
   const handleSync = async () => {
     if (!integration.isConnected) {
-      setSyncStatus({ 
-        type: 'error', 
-        message: 'Entegrasyon Gerekli', 
-        detail: 'Trendyol verilerini çekebilmek için önce API bağlantısını tamamlamalısınız.' 
+      setSyncStatus({
+        type: 'error',
+        message: 'Entegrasyon Gerekli',
+        detail: 'Trendyol verilerini çekebilmek için önce API bağlantısını tamamlamalısınız.'
       });
       return;
     }
@@ -86,23 +92,23 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
         }));
 
         onUpdateProducts(dummyUpdatedProducts);
-        setSyncStatus({ 
-          type: 'success', 
-          message: 'Senkronizasyon Tamamlandı', 
-          detail: res.message || `${res.ordersCount} sipariş ve ${res.productsCount} ürün kontrol edildi.` 
+        setSyncStatus({
+          type: 'success',
+          message: 'Senkronizasyon Tamamlandı',
+          detail: res.message || `${res.ordersCount} sipariş ve ${res.productsCount} ürün kontrol edildi.`
         });
       } else {
-        setSyncStatus({ 
-          type: 'error', 
-          message: 'Senkronizasyon Başarısız', 
-          detail: res?.message || 'Senkronizasyon sırasında bir sorun oluştu.' 
+        setSyncStatus({
+          type: 'error',
+          message: 'Senkronizasyon Başarısız',
+          detail: res?.message || 'Senkronizasyon sırasında bir sorun oluştu.'
         });
       }
     } catch (error: any) {
       console.error("Sync error:", error);
-      setSyncStatus({ 
-        type: 'error', 
-        message: 'Senkronizasyon Hatası', 
+      setSyncStatus({
+        type: 'error',
+        message: 'Senkronizasyon Hatası',
         detail: getErrorMessage(error)
       });
     } finally {
@@ -135,21 +141,21 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
       onUpdateProducts(updated);
 
       const actions: AIAction[] = [
-        { 
-          id: 'act_1', 
-          title: "Stok Takviyesi Gerekenler", 
-          description: "Stoku tükenmek üzere olan ve satış hızı yüksek 3 ürünü hemen sepete ekle.", 
-          type: 'order', 
-          relatedProductIds: updated.filter(u => u.aiDecision?.label === 'Sipariş Bas').map(u => u.id).slice(0, 3), 
+        {
+          id: 'act_1',
+          title: "Stok Takviyesi Gerekenler",
+          description: "Stoku tükenmek üzere olan ve satış hızı yüksek 3 ürünü hemen sepete ekle.",
+          type: 'order',
+          relatedProductIds: updated.filter(u => u.aiDecision?.label === 'Sipariş Bas').map(u => u.id).slice(0, 3),
           cta: "LİSTEYİ GÖR",
           filterBy: 'Sipariş Bas'
         },
-        { 
-          id: 'act_2', 
-          title: "Düşük Dönüşüm / Yüksek Trafik", 
-          description: "Görüntülenmesi çok yüksek ancak sepete ekleme oranı düşük ürünleri optimize et.", 
-          type: 'opportunity', 
-          relatedProductIds: updated.filter(u => u.potentialAnalysis).map(u => u.id).slice(0, 3), 
+        {
+          id: 'act_2',
+          title: "Düşük Dönüşüm / Yüksek Trafik",
+          description: "Görüntülenmesi çok yüksek ancak sepete ekleme oranı düşük ürünleri optimize et.",
+          type: 'opportunity',
+          relatedProductIds: updated.filter(u => u.potentialAnalysis).map(u => u.id).slice(0, 3),
           cta: "ANALİZ ET",
           filterBy: 'Potential'
         }
@@ -176,8 +182,8 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
   const filteredProducts = useMemo(() => {
     let result = products;
     if (searchTerm) {
-      result = result.filter(p => 
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      result = result.filter(p =>
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.sku.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
@@ -205,10 +211,10 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">Performans Özeti</h2>
           <p className="text-slate-500 font-medium text-sm mt-1">Trendyol mağazanızın son 30 günlük verileri analiz ediliyor.</p>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-3">
           {/* Debug: Ping Button */}
-          <button 
+          <button
             onClick={handlePing}
             disabled={pinging}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${pingResult ? (pingResult.includes('HATA') ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white') : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
@@ -219,16 +225,16 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
 
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={18} />
-            <input 
-              type="text" 
-              placeholder="Ürün veya SKU ara..." 
+            <input
+              type="text"
+              placeholder="Ürün veya SKU ara..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold w-64 focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
             />
           </div>
-          
-          <button 
+
+          <button
             onClick={handleSync}
             disabled={syncing}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${syncing ? 'bg-slate-100 text-slate-400' : 'bg-white border-2 border-slate-200 text-slate-600 hover:border-indigo-600 hover:text-indigo-600 shadow-sm'}`}
@@ -236,8 +242,8 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
             <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} />
             {syncing ? 'GÜNCELLENİYOR...' : 'TRENDYOL SENKRONİZE ET'}
           </button>
-          
-          <button 
+
+          <button
             onClick={processAIInsights}
             disabled={loadingProcess}
             className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95 disabled:opacity-50"
@@ -284,7 +290,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
                 </div>
                 <h3 className="text-xl font-black mb-2">{action.title}</h3>
                 <p className="text-sm text-indigo-100/70 font-medium mb-6 leading-relaxed">{action.description}</p>
-                <button 
+                <button
                   onClick={() => {
                     setFilter(action.filterBy as any);
                     setActiveActionProductIds(action.relatedProductIds);
@@ -320,8 +326,8 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sipariş Projeksiyonu:</span>
-            <select 
-              value={targetDays} 
+            <select
+              value={targetDays}
               onChange={(e) => setTargetDays(Number(e.target.value))}
               className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-black text-slate-600 outline-none"
             >
@@ -371,19 +377,18 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
                   </td>
                   <td className="px-6 py-5">
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                       <Metric small label="GÖR" value={product.views} />
-                       <Metric small label="DÖN" value={`%${product.conversion}`} color={product.conversion < 1 ? 'rose' : 'slate'} />
-                       <Metric small label="SEP" value={product.addToCart} />
-                       <Metric small label="FAV" value={product.favorites} />
+                      <Metric small label="GÖR" value={product.views} />
+                      <Metric small label="DÖN" value={`%${product.conversion}`} color={product.conversion < 1 ? 'rose' : 'slate'} />
+                      <Metric small label="SEP" value={product.addToCart} />
+                      <Metric small label="FAV" value={product.favorites} />
                     </div>
                   </td>
                   <td className="px-6 py-5">
                     {product.aiDecision ? (
                       <div className="space-y-1">
-                        <div className={`text-[10px] font-black uppercase px-2 py-0.5 rounded inline-block ${
-                          product.aiDecision.label === 'Sipariş Bas' ? 'bg-rose-600 text-white' : 
-                          product.aiDecision.label === 'Optimize Et' ? 'bg-amber-500 text-white' : 'bg-slate-400 text-white'
-                        }`}>
+                        <div className={`text-[10px] font-black uppercase px-2 py-0.5 rounded inline-block ${product.aiDecision.label === 'Sipariş Bas' ? 'bg-rose-600 text-white' :
+                            product.aiDecision.label === 'Optimize Et' ? 'bg-amber-500 text-white' : 'bg-slate-400 text-white'
+                          }`}>
                           {product.aiDecision.label}
                         </div>
                         <p className="text-[10px] text-slate-500 font-medium leading-tight line-clamp-2 max-w-[180px]">{product.aiDecision.justification}</p>
@@ -395,7 +400,7 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
                   <td className="px-6 py-5 text-right">
                     <div className="flex flex-col items-end gap-2">
                       {product.orderRecommendation && product.orderRecommendation.suggestedQty > 0 ? (
-                        <button 
+                        <button
                           onClick={() => onAddToCart(product, product.orderRecommendation?.suggestedQty)}
                           className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
                         >
@@ -403,9 +408,9 @@ const Dashboard: React.FC<DashboardProps> = ({ products, integration, onAddToCar
                           {product.orderRecommendation.suggestedQty} ADET EKLE
                         </button>
                       ) : (
-                        <button 
-                           onClick={() => onAddToCart(product, 1)}
-                           className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        <button
+                          onClick={() => onAddToCart(product, 1)}
+                          className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                         >
                           <PlusCircle size={18} />
                         </button>
@@ -451,7 +456,7 @@ const FilterButton = ({ active, onClick, label, color = 'slate' }: { active: boo
     indigo: 'bg-indigo-600 text-white'
   };
   return (
-    <button 
+    <button
       onClick={onClick}
       className={`px-3 py-1 rounded-lg text-[9px] font-black tracking-widest transition-all ${active ? activeColors[color] : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
     >

@@ -104,14 +104,15 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
         setTestResult({
           success: true,
           message: res.message || "Bağlantı Başarılı",
-          detail: res.detail || "Bağlantı doğrulandı.",
+          detail: `Status: ${res.status}`,
           debug: res
         } as any);
       } else {
         setTestResult({
           success: false,
-          message: res.message || "Bağlantı Başarısız",
-          detail: res.detail || `Status: ${res.status}`,
+          message: res.error || "Bağlantı Başarısız",
+          detail: `Status: ${res.status}${res.contentType ? ` | Content-Type: ${res.contentType}` : ''}`,
+          rawBodyPreview: res.rawSnippet,
           debug: res
         } as any);
       }

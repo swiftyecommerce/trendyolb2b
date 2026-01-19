@@ -1,104 +1,115 @@
-// Edge Runtime - Real Trendyol API Connection Test
+// Edge Runtime - Trendyol API Connection Test (POST with form data)
 export const config = {
     runtime: 'edge',
 };
 
-export default async function handler() {
+export default async function handler(request: Request) {
+    // CORS for preflight
+    if (request.method === 'OPTIONS') {
+        return new Response(null, {
+            status: 200,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+            },
+        });
+    }
+
     try {
-        // 1. Read env vars
-        const supplierId = process.env.TRENDYOL_SUPPLIER_ID;
-        const apiKey = process.env.TRENDYOL_API_KEY;
-        const apiSecret = process.env.TRENDYOL_API_SECRET;
+        // 1. Only accept POST
+        if (request.method !== 'POST') {
+            return Response.json({ ok: false, error: 'Method not allowed' }, { status: 405 });
+        }
+
+        // 2. Parse request body
+        let body;
+        try {
+            body = await request.json();
+        } catch (e) {
+            return Response.json({ ok: false, error: 'Invalid JSON in request body' }, { status: 400 });
+        }
+
+        const { supplierId, apiKey, apiSecret } = body;
 
         if (!supplierId || !apiKey || !apiSecret) {
             return Response.json({
                 ok: false,
-                source: "backend",
-                message: "Missing env variables: TRENDYOL_SUPPLIER_ID, TRENDYOL_API_KEY, or TRENDYOL_API_SECRET"
-            }, {
-                status: 400,
-                headers: { 'Access-Control-Allow-Origin': '*' }
-            });
+                error: 'Missing required fields: supplierId, apiKey, apiSecret'
+            }, { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
-        // 2. Auth header (Edge-compatible btoa)
+        // 3. Build auth header (Edge-compatible btoa)
         const credentials = btoa(`${apiKey}:${apiSecret}`);
 
-        // 3. Fetch Trendyol API
-        const url = `https://api.trendyol.com/sapigw/suppliers/${supplierId}`;
+        // 4. Trendyol API request
+        const trendyolUrl = `https://api.trendyol.com/sapigw/suppliers/${supplierId}/products?size=1&page=0`;
 
-        const response = await fetch(url, {
+        console.log(`[Trendyol] Fetching: ${trendyolUrl}`);
+
+        const trendyolRes = await fetch(trendyolUrl, {
             method: 'GET',
             headers: {
                 'Authorization': `Basic ${credentials}`,
-                'User-Agent': `${supplierId} - VizyonExcel`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'User-Agent': 'VizyonExcel/1.0 (contact: support@vizyonexcel.com)',
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
             }
         });
 
-        const text = await response.text();
+        const contentType = trendyolRes.headers.get('content-type') || '';
+        const responseText = await trendyolRes.text();
 
-        // 4. Handle response
-        if (response.ok) {
-            let data = null;
-            try {
-                data = JSON.parse(text);
-            } catch (e) {
-                data = text;
-            }
+        console.log(`[Trendyol] Status: ${trendyolRes.status}, Content-Type: ${contentType}`);
 
-            return new Response(
-                JSON.stringify({
-                    ok: true,
-                    source: "trendyol",
-                    status: response.status,
-                    data: data
-                }),
-                { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-            );
+        // 5. Response handling
+        if (!contentType.includes('application/json')) {
+            // Non-JSON response (likely Cloudflare/403 HTML)
+            return Response.json({
+                ok: false,
+                status: trendyolRes.status,
+                error: 'Trendyol JSON dönmedi (muhtemelen Cloudflare/403).',
+                contentType: contentType,
+                rawSnippet: responseText.slice(0, 400)
+            }, { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        // Parse JSON
+        let jsonData;
+        try {
+            jsonData = JSON.parse(responseText);
+        } catch (e) {
+            return Response.json({
+                ok: false,
+                status: trendyolRes.status,
+                error: 'JSON parse hatası',
+                rawSnippet: responseText.slice(0, 400)
+            }, { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        // Success or Trendyol error (but JSON)
+        if (trendyolRes.ok) {
+            return Response.json({
+                ok: true,
+                status: trendyolRes.status,
+                message: 'Bağlantı başarılı',
+                data: jsonData
+            }, { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } });
         } else {
-            // Error from Trendyol
-            let parsed = null;
-            try {
-                parsed = JSON.parse(text);
-            } catch (e) {
-                parsed = null;
-            }
-
-            if (parsed) {
-                return new Response(
-                    JSON.stringify({
-                        ok: false,
-                        source: "trendyol",
-                        status: response.status,
-                        body: parsed
-                    }),
-                    { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-                );
-            } else {
-                return new Response(
-                    JSON.stringify({
-                        ok: false,
-                        source: "trendyol",
-                        status: response.status,
-                        raw: text.slice(0, 500)
-                    }),
-                    { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-                );
-            }
+            return Response.json({
+                ok: false,
+                status: trendyolRes.status,
+                error: jsonData.message || 'Trendyol API hatası',
+                data: jsonData
+            }, { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
     } catch (err: any) {
-        // Bulletproof catch
-        return new Response(
-            JSON.stringify({
-                ok: false,
-                source: "backend",
-                message: err?.message || "Unknown error",
-                stack: err?.stack ? err.stack.slice(0, 300) : null
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-        );
+        console.error('[Trendyol] Critical error:', err?.message);
+        return Response.json({
+            ok: false,
+            error: err?.message || 'Sunucu hatası',
+            status: 500
+        }, { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
 }

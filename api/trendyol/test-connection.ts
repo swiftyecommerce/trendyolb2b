@@ -42,7 +42,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         }
 
         const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
-        const endpoint = `https://api.trendyol.com/sapigw/suppliers/${supplierId}/addresses`;
+        // Switching to a more common/safe endpoint: Product List (limit 1)
+        const endpoint = `https://api.trendyol.com/sapigw/suppliers/${supplierId}/products?page=0&size=1`;
 
         // 1) Server-side Request Log
         console.log("--- TRENDYOL API REQUEST DEBUG ---");
@@ -90,7 +91,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 res.end(JSON.stringify({
                     ok: true,
                     message: "Trendyol API bağlantısı başarılı",
-                    status: 200
+                    status: 200,
+                    usedEndpoint: endpoint
                 }));
             } else {
                 // 3) Enrich JSON with debug info if 403 or error
@@ -102,7 +104,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 const payload: any = {
                     ok: false,
                     message: errorMessage,
-                    status: trendyolRes.status
+                    status: trendyolRes.status,
+                    usedEndpoint: endpoint
                 };
 
                 if (isForbidden) {
@@ -127,7 +130,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             res.end(JSON.stringify({
                 ok: false,
                 message: isTimeout ? "Zaman aşımı: Trendyol yanıt vermedi (15sn)." : `Ağ hatası: Trendyol'a erişilemedi (${fetchError.message}).`,
-                status: 0
+                status: 0,
+                usedEndpoint: endpoint
             }));
         }
 

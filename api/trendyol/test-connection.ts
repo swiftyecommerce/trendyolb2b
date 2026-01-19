@@ -1,4 +1,6 @@
+
 import { IncomingMessage, ServerResponse } from 'http';
+import { requestTrendyol } from '../../lib/trendyol-backend';
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
     // CORS headers
@@ -41,120 +43,51 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             return;
         }
 
-        const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
-        const endpoint = `https://api.trendyol.com/sapigw/suppliers/${supplierId}/products?page=0&size=1`;
+        // Use "addresses" endpoint as it's safe query often used for pinging valid credentials
+        // Note: User asked for "harmless GET like cargo or brands". 
+        // "suppliers/{id}/addresses" is specific to the supplier, verifying the credentials belong to that supplier.
+        // "shipment-providers" is another option but might not need supplierId in path.
+        // Let's use `suppliers/${supplierId}/addresses` as intended connection test.
+        const endpoint = `/suppliers/${supplierId}/addresses`;
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const result = await requestTrendyol(endpoint, 'GET', {
+            supplierId,
+            apiKey,
+            apiSecret,
+            integrationReferenceCode,
+            token
+        });
 
-        // Prepare headers
-        const requestHeaders: any = {
-            'Authorization': `Basic ${auth}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
+        // Construct user-facing response
+        const payload: any = {
+            ok: result.ok,
+            status: result.status,
+            usedEndpoint: `https://api.trendyol.com/sapigw${endpoint}`,
+            supplierIdSent: supplierId,
+            authUserSample: apiKey ? apiKey.substring(0, 4) + '***' : 'N/A',
+            message: result.message || (result.ok ? "Bağlantı başarılı (Adres listesi alındı)" : "Hata detayları için alta bakınız")
         };
 
-        // If extra fields provided, try to use them as typical integration headers
-        // Note: User asked to use them. Since official docs vary, sending as X-Integration-* is a safe bet for debugging/custom implementations
-        // or standard User-Agent appending.
-        let userAgent = `${supplierId} - SelfIntegration`;
-        if (integrationReferenceCode) {
-            requestHeaders['X-Integration-Reference'] = integrationReferenceCode;
-            userAgent += ` - ${integrationReferenceCode}`;
-        }
-        if (token) {
-            requestHeaders['X-Integration-Token'] = token;
-        }
-        requestHeaders['User-Agent'] = userAgent;
+        if (!result.ok) {
+            // Safe truncated body preview
+            payload.detail = result.rawBody ? result.rawBody.substring(0, 300) : "No body returned";
 
-        try {
-            const trendyolRes = await fetch(endpoint, {
-                method: 'GET',
-                headers: requestHeaders,
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-
-            let responseText = "";
-            let responseJson: any = null;
-            let isJson = false;
-
-            // Try reading as text first to capture everything safely
-            responseText = await trendyolRes.text();
-
-            try {
-                responseJson = JSON.parse(responseText);
-                isJson = true;
-            } catch (e) {
-                isJson = false;
+            if (result.status === 403) {
+                payload.message = "403 Forbidden: Yetki Hatası.";
             }
-
-            const payload: any = {
-                ok: trendyolRes.ok,
-                status: trendyolRes.status,
-                usedEndpoint: endpoint,
-                supplierIdSent: supplierId,
-                authUserSample: apiKey ? apiKey.substring(0, 4) + '***' : 'N/A'
-            };
-
-            // Add extra fields to debug output
-            if (integrationReferenceCode) payload.integrationReferenceCodeSent = integrationReferenceCode;
-            if (token) payload.tokenSent = token ? token.substring(0, 4) + '***' : 'N/A';
-
-            if (trendyolRes.ok) {
-                payload.message = "Bağlantı başarılı, ürün listesi çekildi.";
-                if (isJson && responseJson.content) {
-                    payload.message += ` (${responseJson.content.length} ürün bulundu)`;
-                }
-            } else {
-                if (trendyolRes.status === 403) {
-                    payload.message = "Trendyol API 403 Forbidden. Satıcı ID, API Key, API Secret VE Entegrasyon Referans Kodu / Token bilgilerinin doğru tanımlı olduğundan emin olun.";
-                    if (!isJson) {
-                        payload.rawBodyPreview = responseText.substring(0, 200) || "Boş gövde";
-                    } else {
-                        payload.message += ` (Detay: ${JSON.stringify(responseJson)})`;
-                    }
-                } else {
-                    // General error logic
-                    if (isJson && responseJson.message) {
-                        payload.message = `Trendyol Hatası: ${responseJson.message}`;
-                    } else if (isJson && responseJson.errors) {
-                        payload.message = `Trendyol Hataları: ${JSON.stringify(responseJson.errors)}`;
-                    } else {
-                        payload.message = `Trendyol API Hatası: ${trendyolRes.status}`;
-                        payload.rawBodyPreview = responseText.substring(0, 200);
-                    }
-                }
-            }
-
-            res.statusCode = 200;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify(payload));
-
-        } catch (fetchError: any) {
-            clearTimeout(timeoutId);
-            const isTimeout = fetchError.name === 'AbortError';
-
-            const payload = {
-                ok: false,
-                status: 0,
-                usedEndpoint: endpoint,
-                supplierIdSent: supplierId,
-                authUserSample: apiKey ? apiKey.substring(0, 4) + '***' : 'N/A',
-                message: isTimeout ? "Zaman aşımı: Trendyol yanıt vermedi (15sn)." : `Ağ hatası: Trendyol'a erişilemedi (${fetchError.message}).`
-            };
-
-            res.statusCode = 200;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify(payload));
         }
+
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(payload));
 
     } catch (error) {
+        console.error("Test function error:", error);
         res.statusCode = 500;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({
             ok: false,
-            message: "Test bağlantısı sırasında beklenmeyen bir hata oluştu."
+            message: "Test sırasında sunucu içi hata oluştu."
         }));
     }
 }

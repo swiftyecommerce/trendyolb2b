@@ -78,15 +78,14 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
         setTestResult({
           success: true,
           message: res.message || "Bağlantı Başarılı",
-          detail: "API yanıtı debug penceresinde.",
+          detail: res.detail || "Bağlantı doğrulandı.",
           debug: res
         } as any);
       } else {
         setTestResult({
           success: false,
           message: res?.message || "Bağlantı Başarısız",
-          detail: `Status: ${res?.status}`,
-          rawBodyPreview: res?.rawBodyPreview,
+          detail: res?.detail || `Status: ${res?.status}`,
           debug: res
         } as any);
       }
@@ -222,10 +221,21 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
                     </div>
                     <div>
                       <p className="text-sm font-black uppercase tracking-tight leading-none mb-1">{testResult.message}</p>
-                      <p className="text-xs font-medium opacity-80">{testResult.detail}</p>
+                      {(testResult as any).detail && (
+                        <p className="text-xs font-medium opacity-80 mt-1 break-all">{(testResult as any).detail}</p>
+                      )}
+
+                      {/* 403 Warning */}
+                      {testResult.message && testResult.message.includes('403') && (
+                        <div className="mt-3 p-3 bg-rose-100 text-rose-900 rounded-lg text-xs font-bold border border-rose-200">
+                          ⚠️ User-Agent veya Yetki Hatası! <br />
+                          Lütfen API Key/Secret doğruluğunu, IP engeli olup olmadığını ve User-Agent header'ının gittiğini kontrol edin.
+                        </div>
+                      )}
+
                       {(testResult as any).rawBodyPreview && (
                         <p className="mt-2 text-[10px] font-mono opacity-70 bg-black/5 p-1.5 rounded">
-                          Detay: {(testResult as any).rawBodyPreview}
+                          Raw: {(testResult as any).rawBodyPreview}
                         </p>
                       )}
                     </div>

@@ -32,7 +32,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         await new Promise((resolve) => req.on('end', resolve));
 
         const data = JSON.parse(body);
-        const { supplierId, apiKey, apiSecret } = data;
+        const { supplierId, apiKey, apiSecret, integrationReferenceCode, token } = data;
 
         if (!supplierId || !apiKey || !apiSecret) {
             res.statusCode = 400;
@@ -47,14 +47,30 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
 
+        // Prepare headers
+        const requestHeaders: any = {
+            'Authorization': `Basic ${auth}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        };
+
+        // If extra fields provided, try to use them as typical integration headers
+        // Note: User asked to use them. Since official docs vary, sending as X-Integration-* is a safe bet for debugging/custom implementations
+        // or standard User-Agent appending.
+        let userAgent = `${supplierId} - SelfIntegration`;
+        if (integrationReferenceCode) {
+            requestHeaders['X-Integration-Reference'] = integrationReferenceCode;
+            userAgent += ` - ${integrationReferenceCode}`;
+        }
+        if (token) {
+            requestHeaders['X-Integration-Token'] = token;
+        }
+        requestHeaders['User-Agent'] = userAgent;
+
         try {
             const trendyolRes = await fetch(endpoint, {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Basic ${auth}`,
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
+                headers: requestHeaders,
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
@@ -81,6 +97,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 authUserSample: apiKey ? apiKey.substring(0, 4) + '***' : 'N/A'
             };
 
+            // Add extra fields to debug output
+            if (integrationReferenceCode) payload.integrationReferenceCodeSent = integrationReferenceCode;
+            if (token) payload.tokenSent = token ? token.substring(0, 4) + '***' : 'N/A';
+
             if (trendyolRes.ok) {
                 payload.message = "Bağlantı başarılı, ürün listesi çekildi.";
                 if (isJson && responseJson.content) {
@@ -88,7 +108,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 }
             } else {
                 if (trendyolRes.status === 403) {
-                    payload.message = "Trendyol API 403 Forbidden. Lütfen Trendyol panelindeki Satıcı ID, API Key ve API Secret bilgilerini ve entegrasyon yetkilerini kontrol edin.";
+                    payload.message = "Trendyol API 403 Forbidden. Satıcı ID, API Key, API Secret VE Entegrasyon Referans Kodu / Token bilgilerinin doğru tanımlı olduğundan emin olun.";
                     if (!isJson) {
                         payload.rawBodyPreview = responseText.substring(0, 200) || "Boş gövde";
                     } else {

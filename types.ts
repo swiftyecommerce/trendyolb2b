@@ -15,6 +15,8 @@ export interface IntegrationConfig {
   isConnected: boolean;
   lastSync?: string;
   corsProxy?: string; // CORS engellerini aşmak için opsiyonel proxy URL
+  integrationReferenceCode?: string;
+  token?: string;
 }
 
 export interface Product {

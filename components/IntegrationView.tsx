@@ -20,7 +20,9 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
       supplierId: c.supplierId || '',
       apiKey: c.apiKey || '',
       apiSecret: c.apiSecret || '',
-      corsProxy: c.corsProxy || ''
+      corsProxy: c.corsProxy || '',
+      integrationReferenceCode: c.integrationReferenceCode || '',
+      token: c.token || ''
     };
   }
 
@@ -65,6 +67,8 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
           supplierId: form.supplierId,
           apiKey: form.apiKey,
           apiSecret: form.apiSecret,
+          integrationReferenceCode: form.integrationReferenceCode,
+          token: form.token
         }),
       });
 
@@ -165,6 +169,29 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
                     placeholder="••••••••••••••••"
                   />
                   <div className="absolute left-4 top-3.5 text-slate-400"><Lock size={16} /></div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Entegrasyon Referans Kodu (Opsiyonel)</label>
+                  <input
+                    type="text"
+                    value={form.integrationReferenceCode || ''}
+                    onChange={(e) => setForm({ ...form, integrationReferenceCode: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none transition-all hover:border-indigo-300"
+                    placeholder="Varsa giriniz"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Token (Opsiyonel)</label>
+                  <input
+                    type="text"
+                    value={form.token || ''}
+                    onChange={(e) => setForm({ ...form, token: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 outline-none transition-all hover:border-indigo-300"
+                    placeholder="Varsa giriniz"
+                  />
                 </div>
               </div>
 

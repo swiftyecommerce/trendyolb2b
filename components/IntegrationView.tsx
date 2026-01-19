@@ -73,15 +73,17 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
       if (res && res.ok) {
         setTestResult({
           success: true,
-          message: "Bağlantı Başarılı (Dummy)",
-          detail: res.message || "API anahtarları doğrulandı, veri akışı aktif."
-        });
+          message: res.message || "Bağlantı Başarılı",
+          detail: "API yanıtı debug penceresinde.",
+          debug: res
+        } as any);
       } else {
         setTestResult({
           success: false,
-          message: "Bağlantı Başarısız",
-          detail: res?.message || "Beklenmeyen bir hata oluştu."
-        });
+          message: res?.message || "Bağlantı Başarısız",
+          detail: `Status: ${res?.status}`,
+          debug: res
+        } as any);
       }
     } catch (e: any) {
       console.error("Test error:", e);

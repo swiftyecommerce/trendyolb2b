@@ -42,20 +42,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         }
 
         const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
-        // Switching to a more common/safe endpoint: Product List (limit 1)
         const endpoint = `https://api.trendyol.com/sapigw/suppliers/${supplierId}/products?page=0&size=1`;
-
-        // 1) Server-side Request Log
-        console.log("--- TRENDYOL API REQUEST DEBUG ---");
-        console.log("URL:", endpoint);
-        console.log("Method:", "GET");
-        console.log("Headers (Keys):", Object.keys({
-            'Authorization': 'HIDDEN',
-            'User-Agent': `${supplierId} - SelfIntegration`
-        }));
-        console.log("Auth Header Exists:", !!auth);
-        console.log("Supplier ID:", supplierId);
-        console.log("----------------------------------");
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -65,78 +52,83 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
                 method: 'GET',
                 headers: {
                     'Authorization': `Basic ${auth}`,
-                    'User-Agent': `${supplierId} - SelfIntegration`
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
                 },
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
 
-            // 2) Server-side Response Log
-            console.log("--- TRENDYOL API RESPONSE DEBUG ---");
-            console.log("Status:", trendyolRes.status);
-            console.log("Status Text:", trendyolRes.statusText);
+            let responseMessage = "";
 
-            let responseBody = null;
+            // Try to parse JSON body
             try {
-                responseBody = await trendyolRes.json();
-                console.log("Body:", JSON.stringify(responseBody).slice(0, 200) + "...");
-            } catch (e) {
-                console.log("Body: (Non-JSON or Empty)");
-            }
-            console.log("-----------------------------------");
-
-            if (trendyolRes.ok) {
-                res.statusCode = 200;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({
-                    ok: true,
-                    message: "Trendyol API bağlantısı başarılı",
-                    status: 200,
-                    usedEndpoint: endpoint
-                }));
-            } else {
-                // 3) Enrich JSON with debug info if 403 or error
-                const isForbidden = trendyolRes.status === 403;
-                const errorMessage = isForbidden
-                    ? "Trendyol API 403 Forbidden. Yetki veya endpoint sorunu."
-                    : `Trendyol API hatası: ${trendyolRes.status} - ${trendyolRes.statusText || 'Bilinmeyen Hata'}`;
-
-                const payload: any = {
-                    ok: false,
-                    message: errorMessage,
-                    status: trendyolRes.status,
-                    usedEndpoint: endpoint
-                };
-
-                if (isForbidden) {
-                    payload.debug = {
-                        status: 403,
-                        endpoint: endpoint,
-                        authHeaderExists: !!auth,
-                        responseBody: responseBody
-                    };
+                const jsonBody = await trendyolRes.json();
+                // If Trendyol returns a message or valid json, stringify it lightly or grab message
+                if (jsonBody && typeof jsonBody === 'object') {
+                    // Common Trendyol error format often has 'errors' array or 'message'
+                    if (jsonBody.message) responseMessage = jsonBody.message;
+                    else if (jsonBody.errors && Array.isArray(jsonBody.errors)) responseMessage = JSON.stringify(jsonBody.errors);
+                    else responseMessage = "Trendyol'dan JSON yanıt döndü (Detaylar debug alanında)";
+                } else {
+                    responseMessage = String(jsonBody);
                 }
-
-                res.statusCode = 200;
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify(payload));
+            } catch (e) {
+                // Text parsing if JSON fails
+                try {
+                    const textBody = await trendyolRes.text(); // fetch body might be consumed already if json() failed? 
+                    // Actually if json() fails, body is consumed. We can't re-read easily in standard fetch polyfills unless we cloned. 
+                    // But typically json() throws on invalid json.
+                    // In Node fetch, we might not be able to read again. 
+                    // Let's assume if json() failed, we can't read text easily without cloning first. 
+                    // Or we accept we can't read body. 
+                    // However, let's try to handle it safer by cloning if possible or just catching.
+                    // For Vercel Edge/Node environment, simpler is safer:
+                    responseMessage = `Raw response (JSON parse failed) - Status: ${trendyolRes.status}`;
+                } catch (textError) {
+                    responseMessage = "Response body okunamadı.";
+                }
             }
+
+            // Refined Logic: If successful (200), we probably want a success message
+            if (trendyolRes.ok) {
+                responseMessage = responseMessage || "Bağlantı başarılı, ürün listesi çekildi.";
+            } else {
+                responseMessage = responseMessage || `Trendyol API Hatası: ${trendyolRes.status}`;
+            }
+
+            const payload = {
+                ok: trendyolRes.ok,
+                status: trendyolRes.status,
+                usedEndpoint: endpoint,
+                supplierIdSent: supplierId,
+                authUserSample: apiKey ? apiKey.substring(0, 4) + '***' : 'N/A',
+                message: responseMessage
+            };
+
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(payload));
 
         } catch (fetchError: any) {
             clearTimeout(timeoutId);
             const isTimeout = fetchError.name === 'AbortError';
+
+            const payload = {
+                ok: false,
+                status: 0,
+                usedEndpoint: endpoint,
+                supplierIdSent: supplierId,
+                authUserSample: apiKey ? apiKey.substring(0, 4) + '***' : 'N/A',
+                message: isTimeout ? "Zaman aşımı: Trendyol yanıt vermedi (15sn)." : `Ağ hatası: Trendyol'a erişilemedi (${fetchError.message}).`
+            };
+
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({
-                ok: false,
-                message: isTimeout ? "Zaman aşımı: Trendyol yanıt vermedi (15sn)." : `Ağ hatası: Trendyol'a erişilemedi (${fetchError.message}).`,
-                status: 0,
-                usedEndpoint: endpoint
-            }));
+            res.end(JSON.stringify(payload));
         }
 
     } catch (error) {
-        console.error("Critical Error in test-connection:", error);
         res.statusCode = 500;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({

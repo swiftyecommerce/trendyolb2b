@@ -3,6 +3,8 @@ export const config = {
     runtime: 'edge',
 };
 
+const TRENDYOL_BASE_URL = "https://api.trendyol.com/sapigw";
+
 export default async function handler(request: Request) {
     // CORS for preflight
     if (request.method === 'OPTIONS') {
@@ -42,8 +44,8 @@ export default async function handler(request: Request) {
         // 3. Build auth header (Edge-compatible btoa)
         const credentials = btoa(`${apiKey}:${apiSecret}`);
 
-        // 4. Trendyol API request
-        const trendyolUrl = `https://api.trendyol.com/sapigw/suppliers/${supplierId}/products?size=1&page=0`;
+        // 4. Trendyol API request - small GET
+        const trendyolUrl = `${TRENDYOL_BASE_URL}/suppliers/${supplierId}/products?size=1&page=0`;
 
         console.log(`[Trendyol] Fetching: ${trendyolUrl}`);
 
@@ -51,7 +53,7 @@ export default async function handler(request: Request) {
             method: 'GET',
             headers: {
                 'Authorization': `Basic ${credentials}`,
-                'User-Agent': 'VizyonExcel/1.0 (contact: support@vizyonexcel.com)',
+                'User-Agent': `VizyonExcel/1.0 (supplierId=${supplierId})`,
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
@@ -62,19 +64,30 @@ export default async function handler(request: Request) {
 
         console.log(`[Trendyol] Status: ${trendyolRes.status}, Content-Type: ${contentType}`);
 
-        // 5. Response handling
-        if (!contentType.includes('application/json')) {
-            // Non-JSON response (likely Cloudflare/403 HTML)
+        // 5. Check for HTML 4xx (Cloudflare/403)
+        if (contentType.includes('text/html') && trendyolRes.status >= 400 && trendyolRes.status < 500) {
             return Response.json({
                 ok: false,
                 status: trendyolRes.status,
-                error: 'Trendyol JSON dönmedi (muhtemelen Cloudflare/403).',
+                error: 'TRENDYOL_HTML_4XX',
+                hamCevapTipi: 'html403',
                 contentType: contentType,
                 rawSnippet: responseText.slice(0, 400)
             }, { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
-        // Parse JSON
+        // 6. Non-JSON response
+        if (!contentType.includes('application/json')) {
+            return Response.json({
+                ok: false,
+                status: trendyolRes.status,
+                error: 'Trendyol JSON dönmedi',
+                contentType: contentType,
+                rawSnippet: responseText.slice(0, 400)
+            }, { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } });
+        }
+
+        // 7. Parse JSON
         let jsonData;
         try {
             jsonData = JSON.parse(responseText);
@@ -87,7 +100,7 @@ export default async function handler(request: Request) {
             }, { status: 200, headers: { 'Access-Control-Allow-Origin': '*' } });
         }
 
-        // Success or Trendyol error (but JSON)
+        // 8. Success or Trendyol error (but JSON)
         if (trendyolRes.ok) {
             return Response.json({
                 ok: true,

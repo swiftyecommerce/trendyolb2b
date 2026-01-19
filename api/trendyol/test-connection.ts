@@ -31,20 +31,60 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
 
         await new Promise((resolve) => req.on('end', resolve));
 
-        // Parse body just to validate valid JSON came through, although we don't strictly use it for dummy response
         const data = JSON.parse(body);
         const { supplierId, apiKey, apiSecret } = data;
 
         if (!supplierId || !apiKey || !apiSecret) {
-            // Optional validation just to be realistic
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ ok: false, message: "Eksik bilgi: supplierId, apiKey ve apiSecret zorunludur." }));
+            return;
         }
 
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({
-            ok: true,
-            message: "Test bağlantısı başarılı (dummy)"
-        }));
+        const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        try {
+            const trendyolRes = await fetch(`https://api.trendyol.com/sapigw/suppliers/${supplierId}/addresses`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Basic ${auth}`,
+                    'User-Agent': `${supplierId} - SelfIntegration`
+                },
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            if (trendyolRes.ok) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                    ok: true,
+                    message: "Trendyol API bağlantısı başarılı",
+                    status: 200
+                }));
+            } else {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                    ok: false,
+                    message: `Trendyol API hatası: ${trendyolRes.status} - ${trendyolRes.statusText || 'Bilinmeyen Hata'}`,
+                    status: trendyolRes.status
+                }));
+            }
+
+        } catch (fetchError: any) {
+            clearTimeout(timeoutId);
+            const isTimeout = fetchError.name === 'AbortError';
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({
+                ok: false,
+                message: isTimeout ? "Zaman aşımı: Trendyol yanıt vermedi (15sn)." : `Ağ hatası: Trendyol'a erişilemedi (${fetchError.message}).`,
+                status: 0
+            }));
+        }
 
     } catch (error) {
         res.statusCode = 500;

@@ -11,14 +11,14 @@ export default async function handler() {
         const apiSecret = process.env.TRENDYOL_API_SECRET;
 
         if (!supplierId || !apiKey || !apiSecret) {
-            return new Response(
-                JSON.stringify({
-                    ok: false,
-                    source: "backend",
-                    message: "Missing env variables: TRENDYOL_SUPPLIER_ID, TRENDYOL_API_KEY, or TRENDYOL_API_SECRET"
-                }),
-                { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-            );
+            return Response.json({
+                ok: false,
+                source: "backend",
+                message: "Missing env variables: TRENDYOL_SUPPLIER_ID, TRENDYOL_API_KEY, or TRENDYOL_API_SECRET"
+            }, {
+                status: 400,
+                headers: { 'Access-Control-Allow-Origin': '*' }
+            });
         }
 
         // 2. Auth header (Edge-compatible btoa)

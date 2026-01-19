@@ -245,10 +245,30 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
                     <div className="mt-1">
                       {testResult.success ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
                     </div>
-                    <div>
+                    <div className="flex-1 w-full min-w-0">
                       <p className="text-sm font-black uppercase tracking-tight leading-none mb-1">{testResult.message}</p>
                       {(testResult as any).detail && (
                         <p className="text-xs font-medium opacity-80 mt-1 break-all">{(testResult as any).detail}</p>
+                      )}
+
+                      {/* Trendyol JSON Body Error */}
+                      {(testResult as any).debug?.body && (
+                        <div className="mt-3">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Trendyol Hata Gövdesi</p>
+                          <pre className="text-[10px] bg-white/50 border border-slate-200 p-2 rounded-lg overflow-auto max-h-40">
+                            {JSON.stringify((testResult as any).debug.body, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Trendyol Raw (HTML/Text) Error */}
+                      {(testResult as any).debug?.raw && (
+                        <div className="mt-3">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Trendyol Ham Cevap</p>
+                          <div className="text-[10px] font-mono bg-rose-100/50 border border-rose-200 p-2 rounded-lg overflow-auto max-h-40 break-all whitespace-pre-wrap text-rose-800">
+                            {(testResult as any).debug.raw}
+                          </div>
+                        </div>
                       )}
 
                       {/* 403 Warning */}

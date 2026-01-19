@@ -1,10 +1,20 @@
 
 import { IncomingMessage, ServerResponse } from 'http';
+import { getTrendyolHeaders } from '../../lib/trendyol-backend';
 
 // Helper to ensure JSON response
 const sendJson = (res: ServerResponse, status: number, data: any) => {
     if (!res.headersSent) {
-        res.statusCode = status;
+        res.statusCode = status; // Start with the error status (e.g. 403), but handle carefully
+        // User requested: res.status(response.status).json({...})
+        // So we should mirror the Trendyol status code if possible, or 200 if we want to process it in frontend logic cleanly?
+        // User's example: res.status(response.status).json(...)
+        // But if I return 403 to frontend, browser might just show error in console. 
+        // Standard practice for "proxy" endpoints finding an error upstream is often 200 with ok:false, 
+        // OR standard HTTP proxy 403.
+        // The user specifically asked: "res.status(response.status).json({...})"
+        // Make sure frontend can read the body of a 403 response.
+
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify(data));
     }
@@ -27,8 +37,6 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     }
 
     try {
-        console.log("TEST-CONNECTION: Start");
-
         if (req.method !== 'POST') {
             return sendJson(res, 405, { ok: false, message: 'Method Not Allowed' });
         }
@@ -51,59 +59,73 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             return sendJson(res, 400, { ok: false, message: "Eksik bilgi: supplierId, apiKey, apiSecret" });
         }
 
-        // 1. Auth Header
-        const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+        // 1. Get Headers
+        const headers = getTrendyolHeaders({ supplierId, apiKey, apiSecret });
 
         // 2. Endpoint: suppliers/{id}
         const url = `https://api.trendyol.com/sapigw/suppliers/${supplierId}`;
-
         console.log(`FETCHING: ${url}`);
 
         // 3. Strict Fetch
         const response = await fetch(url, {
             method: 'GET',
-            headers: {
-                'Authorization': `Basic ${auth}`,
-                'User-Agent': 'VizyonExcel/1.0',
-                'Content-Type': 'application/json'
-            }
+            headers: headers
         });
 
         const text = await response.text();
-        let jsonBody: any = null;
-        try {
-            if (text && text.trim().length > 0) {
-                jsonBody = JSON.parse(text);
+
+        // 4. Handle Response
+        if (response.status !== 200) {
+            // Error handling logic as requested
+            let parsed = null;
+            try {
+                parsed = JSON.parse(text);
+            } catch (e) {
+                parsed = null;
             }
-        } catch (e) {
-            jsonBody = null;
-        }
 
-        // 4 & 5. Construct Response
-        const payload: any = {
-            ok: response.ok,
-            status: response.status,
-            requestId: response.headers.get('x-request-id') || undefined,
-        };
-
-        if (jsonBody) {
-            payload.body = jsonBody;
-            if (response.ok) {
-                payload.message = "Bağlantı başarılı: Satıcı bilgileri alındı.";
+            if (parsed) {
+                // JSON Error Response
+                return sendJson(res, response.status, {
+                    ok: false,
+                    source: "trendyol",
+                    status: response.status,
+                    body: parsed,
+                    message: parsed.message || "Trendyol Hatası"
+                });
             } else {
-                payload.message = jsonBody.message || "Trendyol API Hatası";
+                // Raw Error Response
+                return sendJson(res, response.status, {
+                    ok: false,
+                    source: "trendyol",
+                    status: response.status,
+                    raw: text.slice(0, 500),
+                    message: `Trendyol Hatası (${response.status})`
+                });
             }
-        } else {
-            // Non-JSON Response (HTML or raw text)
-            payload.ok = false;
-            payload.source = "trendyol"; // Marking source
-            payload.raw = text.substring(0, 1000); // Send first 1000 chars
-            payload.message = `Trendyol JSON dönmedi (${response.status})`;
         }
 
-        // Return to frontend with 200 OK so frontend parses JSON successfully
-        // The actual API status is in payload.status
-        sendJson(res, 200, payload);
+        // Success (200)
+        let parsedSuccess = null;
+        try {
+            parsedSuccess = JSON.parse(text);
+        } catch (e) {
+            // Even 200 OK could theoretically be non-JSON? Unlikely for API but possible.
+            return sendJson(res, 200, {
+                ok: true, // It was 200 OK
+                status: 200,
+                message: "Bağlantı başarılı ancak JSON parse edilemedi.",
+                raw: text.slice(0, 500)
+            });
+        }
+
+        sendJson(res, 200, {
+            ok: true,
+            source: "trendyol",
+            status: 200,
+            body: parsedSuccess,
+            message: "Bağlantı başarılı: Satıcı bilgileri alındı."
+        });
 
     } catch (error: any) {
         console.error("TEST-CONNECTION ERROR:", error);

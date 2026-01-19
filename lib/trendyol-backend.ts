@@ -3,8 +3,20 @@ export interface TrendyolRequestConfig {
     supplierId: string;
     apiKey: string;
     apiSecret: string;
-    integrationReferenceCode?: string;
-    token?: string;
+}
+
+export function getTrendyolHeaders(config: TrendyolRequestConfig) {
+    const { supplierId, apiKey, apiSecret } = config;
+
+    // Use UTF-8 to Base64 conversion as requested
+    const credentials = Buffer.from(`${apiKey}:${apiSecret}`, 'utf8').toString('base64');
+
+    return {
+        "Authorization": `Basic ${credentials}`,
+        "User-Agent": `${supplierId} - VizyonExcel`,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    };
 }
 
 export interface TrendyolResponse<T = any> {
@@ -17,9 +29,7 @@ export interface TrendyolResponse<T = any> {
 
 const BASE_URL = 'https://api.trendyol.com/sapigw';
 
-/**
- * Standardized Trendyol API Request Handler
- */
+// Kept for backward compatibility if other files use it, but updated to use the new header helper
 export async function requestTrendyol<T = any>(
     endpoint: string,
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
@@ -27,39 +37,11 @@ export async function requestTrendyol<T = any>(
     bodyData?: any
 ): Promise<TrendyolResponse<T>> {
 
-    const { supplierId, apiKey, apiSecret, integrationReferenceCode, token } = config;
-
-    // 1. Auth Strategy (Default: apiKey:apiSecret)
-    // To switch later if needed, we could use `${supplierId}-${apiKey}:${apiSecret}`
-    const authString = `${apiKey}:${apiSecret}`;
-    const auth = Buffer.from(authString).toString('base64');
-
-    // 2. Mandatory User-Agent
-    let userAgent = `${supplierId} - VizyonExcel - support@vizyonexcel.com`;
-    if (integrationReferenceCode) {
-        userAgent += ` - ${integrationReferenceCode}`;
-    }
-
-    // 3. Headers
-    const headers: Record<string, string> = {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'User-Agent': userAgent
-    };
-
-    // Optional Integration headers if provided
-    if (integrationReferenceCode) {
-        headers['X-Integration-Reference'] = integrationReferenceCode;
-    }
-    if (token) {
-        headers['X-Integration-Token'] = token;
-    }
-
+    const headers = getTrendyolHeaders(config);
     const url = `${BASE_URL}${endpoint}`;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
         const res = await fetch(url, {
@@ -76,21 +58,18 @@ export async function requestTrendyol<T = any>(
             status: res.status
         };
 
-        // Safe Body Reading
         const text = await res.text();
-        result.rawBody = text; // Keep raw body for debugging especially on 403
+        result.rawBody = text;
 
         try {
             if (text && text.trim().length > 0) {
                 const json = JSON.parse(text);
                 result.data = json;
-                // Try to find a message in common places
                 if (json.message) result.message = json.message;
                 else if (json.errors && Array.isArray(json.errors)) result.message = JSON.stringify(json.errors);
             }
         } catch (e) {
-            // Not JSON
-            result.message = text.substring(0, 300); // Extract preview
+            result.message = text.substring(0, 300);
         }
 
         return result;

@@ -1,0 +1,5 @@
+{
+  "name": "VizyonExcel - Trendyol Sipariş Yönetimi",
+  "description": "Trendyol satış raporlarını analiz eden, ürün metriklerini görselleştiren ve bütçe odaklı sipariş önerileri/PDF raporları oluşturan SaaS platformu.",
+  "requestFramePermissions": []
+}

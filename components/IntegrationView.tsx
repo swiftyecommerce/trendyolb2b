@@ -62,11 +62,17 @@ const IntegrationView: React.FC<IntegrationViewProps> = ({ config, onUpdate }) =
 
     try {
       // Backend artık anında döneceği için frontend timeout'u kaldırıldı.
-      const res = await trendyol.testConnection({
-        supplierId: form.supplierId,
-        apiKey: form.apiKey,
-        apiSecret: form.apiSecret
+      const response = await fetch("/api/trendyol/test-connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          supplierId: form.supplierId,
+          apiKey: form.apiKey,
+          apiSecret: form.apiSecret,
+        }),
       });
+
+      const res = await response.json();
 
       // AŞAMA 2: Yanıt alım logu
       console.log("TEST RESPONSE RECEIVED", res);

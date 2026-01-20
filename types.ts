@@ -1,3 +1,122 @@
+// ============================================
+// CORE ANALYTICS TYPES
+// ============================================
+
+// Raw data from Excel parsing
+export interface RawSaleRow {
+  date: string;          // 'YYYY-MM-DD'
+  modelKodu: string;     // unique product identifier
+  sku?: string;
+  productName: string;
+  category?: string;
+  brand?: string;
+  unitPrice: number;
+  quantity: number;
+  revenue: number;       // unitPrice * quantity
+  cost?: number;
+  impressions?: number;
+  addToCart?: number;
+  sessions?: number;
+  returns?: number;
+  favorites?: number;
+  imageUrl?: string;
+  productUrl?: string;
+  stock?: number;
+  buyboxPrice?: number;
+}
+
+// Aggregated stats by product
+export interface ProductStats {
+  modelKodu: string;
+  productName: string;
+  category?: string;
+  brand?: string;
+  imageUrl?: string;
+  productUrl?: string;
+
+  // Sales metrics
+  totalRevenue: number;
+  totalQuantity: number;
+  avgUnitPrice: number;
+  minPrice: number;
+  maxPrice: number;
+
+  // Engagement metrics
+  totalImpressions: number;
+  totalAddToCart: number;
+  totalFavorites: number;
+
+  // Calculated rates
+  conversionRate: number;      // quantity / impressions
+  viewToCartRate: number;      // addToCart / impressions
+  cartToSaleRate: number;      // quantity / addToCart
+
+  // Stock & Cost
+  currentStock: number | null;
+  buyboxPrice: number | null;
+  totalCost?: number;
+  grossProfit?: number;
+  profitMargin?: number;
+
+  // Segment
+  segment: 'A' | 'B' | 'C';
+}
+
+// Stock recommendation
+export interface StockRecommendation {
+  modelKodu: string;
+  productName: string;
+  imageUrl?: string;
+
+  currentStock: number | null;
+  dailySales: number;
+  daysUntilEmpty: number | null;
+  recommendedOrder: number;
+  targetStockDays: number;
+  urgency: 'critical' | 'warning' | 'ok' | 'no-data';
+
+  totalRevenue: number;
+  conversionRate?: number;
+}
+
+// Daily aggregated stats
+export interface DayStats {
+  date: string;
+  totalRevenue: number;
+  totalQuantity: number;
+  totalImpressions: number;
+  totalAddToCart: number;
+  orderCount: number;
+  aov: number; // average order value
+}
+
+// Global analytics state
+export interface AnalyticsState {
+  rawRows: RawSaleRow[];
+  byProduct: Record<string, ProductStats>;
+  byDate: Record<string, DayStats>;
+  products: ProductStats[];
+  lastUpdatedAt?: string;
+
+  // Loaded report info
+  loadedReports: {
+    period: ReportPeriod;
+    uploadDate: string;
+    rowCount: number;
+  }[];
+}
+
+// App settings
+export interface AppSettings {
+  targetStockDays: number;          // default 30
+  minImpressionsForOpportunity: number; // default 100
+  currency: string;                 // 'TRY'
+  lowStockThreshold: number;        // default 10
+}
+
+// ============================================
+// EXISTING TYPES (kept for compatibility)
+// ============================================
 
 export interface PotentialAnalysis {
   diagnosis: string;
@@ -14,7 +133,7 @@ export interface IntegrationConfig {
   apiSecret: string;
   isConnected: boolean;
   lastSync?: string;
-  corsProxy?: string; // CORS engellerini aşmak için opsiyonel proxy URL
+  corsProxy?: string;
   integrationReferenceCode?: string;
   token?: string;
 }
@@ -40,7 +159,7 @@ export interface Product {
     dailyAvgSales: number;
     targetDays: number;
     reasoning: string;
-    estimatedStockLife: number; // days
+    estimatedStockLife: number;
   };
   aiDecision?: {
     score: number;
@@ -52,17 +171,23 @@ export interface Product {
   potentialAnalysis?: PotentialAnalysis;
 }
 
-export interface CartItem extends Product {
-  orderQuantity: number;
-  isOverridden?: boolean;
-  roiEstimate: number; // estimated days to sell this batch
+export interface CartItem {
+  modelKodu: string;
+  productName: string;
+  imageUrl?: string;
+  quantity: number;
+  unitCost?: number;
+  totalCost: number;
+  recommendedQty?: number;
 }
 
 export enum AppTab {
   DASHBOARD = 'dashboard',
-  PRD = 'prd',
+  ANALYSIS = 'analysis',
+  PRODUCTS = 'products',
   CART = 'cart',
-  INTEGRATION = 'integration'
+  DATA_MANAGEMENT = 'data_management',
+  SETTINGS = 'settings'
 }
 
 export interface AIAction {
@@ -78,4 +203,25 @@ export interface AIAction {
 export interface AIInsightResponse {
   summary: string;
   actions: AIAction[];
+}
+
+// ============================================
+// EXCEL PARSING TYPES
+// ============================================
+
+export type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export interface UploadedReport {
+  period: ReportPeriod;
+  uploadDate: string;
+  rowCount: number;
+  data: RawSaleRow[];
+}
+
+export interface ExcelDataStore {
+  reports: Record<ReportPeriod, UploadedReport | undefined>;
+  productList?: {
+    uploadDate: string;
+    products: RawSaleRow[];
+  };
 }

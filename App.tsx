@@ -17,21 +17,39 @@ const MOCK_PRODUCTS: Product[] = [
 ];
 
 const INITIAL_INTEGRATION: IntegrationConfig = {
-  supplierId: '156804',
-  apiKey: 'aTHoNm8Fn4M7vJaZ3n28',
-  apiSecret: '6kbNABHI2TTUspvtBleY',
-  isConnected: true,
-  lastSync: '24.05.2024 14:30',
-  corsProxy: 'https://api.allorigins.win/raw?url=' 
+  supplierId: '',
+  apiKey: '',
+  apiSecret: '',
+  isConnected: false,
+  lastSync: '',
+  corsProxy: ''
 };
+
+// Load integration config from localStorage
+function loadIntegrationConfig(): IntegrationConfig {
+  try {
+    const saved = localStorage.getItem('trendyol_integration');
+    if (saved) {
+      return { ...INITIAL_INTEGRATION, ...JSON.parse(saved) };
+    }
+  } catch (e) {
+    console.error('Failed to load integration config:', e);
+  }
+  return INITIAL_INTEGRATION;
+}
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.DASHBOARD);
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [integration, setIntegration] = useState<IntegrationConfig>(INITIAL_INTEGRATION);
+  const [integration, setIntegration] = useState<IntegrationConfig>(() => loadIntegrationConfig());
   const [isDemoMode, setIsDemoMode] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(true);
+
+  // Save integration config to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('trendyol_integration', JSON.stringify(integration));
+  }, [integration]);
 
   useEffect(() => {
     if (process.env.API_KEY && process.env.API_KEY !== "") {
@@ -63,18 +81,18 @@ const App: React.FC = () => {
     setCart(prev => {
       const existing = prev.find(item => item.id === product.id);
       const qtyToAdd = suggestedQty || 10;
-      
+
       if (existing) {
-        return prev.map(item => item.id === product.id 
-          ? { ...item, orderQuantity: item.orderQuantity + qtyToAdd } 
+        return prev.map(item => item.id === product.id
+          ? { ...item, orderQuantity: item.orderQuantity + qtyToAdd }
           : item
         );
       }
-      return [...prev, { 
-        ...product, 
-        orderQuantity: qtyToAdd, 
+      return [...prev, {
+        ...product,
+        orderQuantity: qtyToAdd,
         isOverridden: false,
-        roiEstimate: product.orderRecommendation?.targetDays || 20 
+        roiEstimate: product.orderRecommendation?.targetDays || 20
       }];
     });
   };
@@ -87,10 +105,10 @@ const App: React.FC = () => {
     setCart(prev => prev.map(item => {
       if (item.id === id) {
         const rec = item.orderRecommendation?.suggestedQty;
-        return { 
-          ...item, 
-          orderQuantity: qty, 
-          isOverridden: rec !== undefined && qty !== rec 
+        return {
+          ...item,
+          orderQuantity: qty,
+          isOverridden: rec !== undefined && qty !== rec
         };
       }
       return item;
@@ -108,48 +126,48 @@ const App: React.FC = () => {
           <h1 className="text-2xl font-black text-indigo-700 tracking-tighter italic">VizyonExcel</h1>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">SaaS Karar Destek</p>
         </div>
-        
+
         <nav className="mt-4 px-4 space-y-1.5 flex-grow">
-          <NavItem 
-            active={activeTab === AppTab.DASHBOARD} 
-            onClick={() => setActiveTab(AppTab.DASHBOARD)} 
-            icon={<LayoutDashboard size={18} />} 
-            label="Analiz & Dashboard" 
+          <NavItem
+            active={activeTab === AppTab.DASHBOARD}
+            onClick={() => setActiveTab(AppTab.DASHBOARD)}
+            icon={<LayoutDashboard size={18} />}
+            label="Analiz & Dashboard"
           />
-          <NavItem 
-            active={activeTab === AppTab.CART} 
-            onClick={() => setActiveTab(AppTab.CART)} 
-            icon={<ShoppingCart size={18} />} 
-            label="Sipariş Sepeti" 
+          <NavItem
+            active={activeTab === AppTab.CART}
+            onClick={() => setActiveTab(AppTab.CART)}
+            icon={<ShoppingCart size={18} />}
+            label="Sipariş Sepeti"
             badge={cart.length > 0 ? cart.length : undefined}
           />
-          <NavItem 
-            active={activeTab === AppTab.PRD} 
-            onClick={() => setActiveTab(AppTab.PRD)} 
-            icon={<FileText size={18} />} 
-            label="Ürün Stratejisi" 
+          <NavItem
+            active={activeTab === AppTab.PRD}
+            onClick={() => setActiveTab(AppTab.PRD)}
+            icon={<FileText size={18} />}
+            label="Ürün Stratejisi"
           />
-          
+
           <div className="pt-4">
-             <div 
-               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-               className="flex items-center justify-between px-3.5 py-2 text-slate-400 font-black uppercase tracking-[0.1em] text-[10px] cursor-pointer hover:text-slate-600 transition-colors"
-             >
-                Ayarlar
-                <ChevronDown size={14} className={`transition-transform duration-300 ${isSettingsOpen ? '' : '-rotate-90'}`} />
-             </div>
-             
-             {isSettingsOpen && (
-               <div className="mt-2 space-y-1 ml-2 border-l border-slate-100">
-                  <NavItem 
-                    active={activeTab === AppTab.INTEGRATION} 
-                    onClick={() => setActiveTab(AppTab.INTEGRATION)} 
-                    icon={<Globe size={16} />} 
-                    label="Pazar Entegrasyonları" 
-                    isSubItem
-                  />
-               </div>
-             )}
+            <div
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              className="flex items-center justify-between px-3.5 py-2 text-slate-400 font-black uppercase tracking-[0.1em] text-[10px] cursor-pointer hover:text-slate-600 transition-colors"
+            >
+              Ayarlar
+              <ChevronDown size={14} className={`transition-transform duration-300 ${isSettingsOpen ? '' : '-rotate-90'}`} />
+            </div>
+
+            {isSettingsOpen && (
+              <div className="mt-2 space-y-1 ml-2 border-l border-slate-100">
+                <NavItem
+                  active={activeTab === AppTab.INTEGRATION}
+                  onClick={() => setActiveTab(AppTab.INTEGRATION)}
+                  icon={<Globe size={16} />}
+                  label="Pazar Entegrasyonları"
+                  isSubItem
+                />
+              </div>
+            )}
           </div>
         </nav>
 
@@ -158,7 +176,7 @@ const App: React.FC = () => {
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mb-1">Cari Limit</p>
             <p className="text-lg font-black text-slate-900">{budgetLimit.toLocaleString()} ₺</p>
             <div className="mt-3 w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
-              <div 
+              <div
                 className={`h-1.5 rounded-full transition-all duration-1000 ${totalCartCost > budgetLimit ? 'bg-rose-500' : 'bg-indigo-600'}`}
                 style={{ width: `${Math.min(100, (totalCartCost / budgetLimit) * 100)}%` }}
               ></div>
@@ -175,46 +193,46 @@ const App: React.FC = () => {
             <span className="text-sm font-black uppercase tracking-widest text-slate-400">VizyonExcel /</span>
             <span className="text-sm font-black text-indigo-700 uppercase tracking-widest">{activeTab === AppTab.INTEGRATION ? 'Market Entegrasyonları' : activeTab}</span>
           </div>
-          
+
           <div className="flex items-center gap-4">
-             {integration.isConnected && (
-               <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg">
-                  <Link2 size={14} className="text-emerald-600" />
-                  <span className="text-[10px] font-black text-emerald-700 uppercase">Trendyol Bağlı</span>
-               </div>
-             )}
-             <button className="p-2 text-slate-400 hover:text-indigo-600 transition-colors relative bg-slate-50 rounded-full">
-               <Bell size={18} />
-               <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-rose-500 rounded-full border-2 border-white"></span>
-             </button>
-             <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
-                <div className="text-right">
-                  <p className="text-xs font-black text-slate-900 leading-none">Trendyol Merchant</p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">ID: {integration.supplierId}</p>
-                </div>
-                <div className="h-9 w-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-lg shadow-indigo-100">
-                    TM
-                </div>
-             </div>
+            {integration.isConnected && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg">
+                <Link2 size={14} className="text-emerald-600" />
+                <span className="text-[10px] font-black text-emerald-700 uppercase">Trendyol Bağlı</span>
+              </div>
+            )}
+            <button className="p-2 text-slate-400 hover:text-indigo-600 transition-colors relative bg-slate-50 rounded-full">
+              <Bell size={18} />
+              <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-rose-500 rounded-full border-2 border-white"></span>
+            </button>
+            <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
+              <div className="text-right">
+                <p className="text-xs font-black text-slate-900 leading-none">Trendyol Merchant</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mt-1">ID: {integration.supplierId}</p>
+              </div>
+              <div className="h-9 w-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-lg shadow-indigo-100">
+                TM
+              </div>
+            </div>
           </div>
         </header>
 
         <div className="p-8 pb-32">
           {activeTab === AppTab.DASHBOARD && (
-            <Dashboard 
-              products={products} 
+            <Dashboard
+              products={products}
               integration={integration}
-              onAddToCart={addToCart} 
-              onFileUpload={handleFileUpload} 
+              onAddToCart={addToCart}
+              onFileUpload={handleFileUpload}
               onUpdateProducts={setProducts}
               onNavigateToTab={setActiveTab}
             />
           )}
           {activeTab === AppTab.CART && (
-            <CartView 
-              items={cart} 
-              onRemove={removeFromCart} 
-              onUpdateQty={updateCartQty} 
+            <CartView
+              items={cart}
+              onRemove={removeFromCart}
+              onUpdateQty={updateCartQty}
             />
           )}
           {activeTab === AppTab.PRD && <PRDView />}
@@ -228,7 +246,7 @@ const App: React.FC = () => {
 };
 
 const NavItem = ({ active, onClick, icon, label, badge, isSubItem }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string, badge?: number, isSubItem?: boolean }) => (
-  <button 
+  <button
     onClick={onClick}
     className={`w-full flex items-center justify-between transition-all ${isSubItem ? 'p-2.5 pl-6' : 'p-3.5'} rounded-xl ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}
   >

@@ -3,7 +3,7 @@
  * Direct calls to Trendyol API with proper headers
  */
 
-const TRENDYOL_BASE_URL = "https://api.trendyol.com/sapigw";
+const TRENDYOL_BASE_URL = "https://apigw.trendyol.com";
 
 interface TrendyolCredentials {
   supplierId: string;

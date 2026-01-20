@@ -3,7 +3,7 @@ export const config = {
     runtime: 'edge',
 };
 
-const TRENDYOL_BASE_URL = "https://api.trendyol.com/sapigw";
+const TRENDYOL_BASE_URL = "https://apigw.trendyol.com";
 
 export default async function handler(request: Request) {
     // CORS for preflight

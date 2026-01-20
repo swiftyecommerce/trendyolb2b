@@ -44,8 +44,8 @@ export default async function handler(request: Request) {
         // 3. Build auth header (Edge-compatible btoa)
         const credentials = btoa(`${apiKey}:${apiSecret}`);
 
-        // 4. Trendyol API request - small GET
-        const trendyolUrl = `${TRENDYOL_BASE_URL}/suppliers/${supplierId}/products?size=1&page=0`;
+        // 4. Trendyol API request - test with products endpoint
+        const trendyolUrl = `${TRENDYOL_BASE_URL}/integration/product/sellers/${supplierId}/products?size=1&page=0`;
 
         console.log(`[Trendyol] Fetching: ${trendyolUrl}`);
 
@@ -53,7 +53,7 @@ export default async function handler(request: Request) {
             method: 'GET',
             headers: {
                 'Authorization': `Basic ${credentials}`,
-                'User-Agent': `VizyonExcel/1.0 (supplierId=${supplierId})`,
+                'User-Agent': `${supplierId} - SelfIntegration`,
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }

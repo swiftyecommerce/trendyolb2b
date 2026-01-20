@@ -28,8 +28,8 @@ app.post('/api/trendyol/test-connection', async (req, res) => {
         // Build auth header
         const credentials = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
 
-        // Trendyol API request - CORRECT ENDPOINT
-        const trendyolUrl = `https://apigw.trendyol.com/suppliers/${supplierId}/products?size=1&page=0`;
+        // Trendyol API request - CORRECT ENDPOINT PATH
+        const trendyolUrl = `https://apigw.trendyol.com/integration/product/sellers/${supplierId}/products?size=1&page=0`;
 
         console.log(`[Trendyol] Fetching: ${trendyolUrl}`);
 

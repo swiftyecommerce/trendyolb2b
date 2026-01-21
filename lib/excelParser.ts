@@ -230,24 +230,16 @@ export function saveReport(
 
     // For historical monthly data, ONLY store metadata (no raw data)
     // This prevents localStorage quota issues
-    if (monthInfo) {
-        store.reports[storageKey] = {
-            period: 'monthly',
-            uploadDate: new Date().toISOString(),
-            rowCount: data.length,
-            year: monthInfo.year,
-            month: monthInfo.month
-            // NO data field for historical uploads
-        };
-    } else {
-        // For current period reports, store the data
-        store.reports[storageKey] = {
-            period,
-            uploadDate: new Date().toISOString(),
-            rowCount: data.length,
-            data
-        };
-    }
+    // Always store data, even for historical months
+    // We rely on Supabase for large storage now, so we can be less aggressive about localStorage limits
+    store.reports[storageKey] = {
+        period: monthInfo ? 'monthly' : period,
+        uploadDate: new Date().toISOString(),
+        rowCount: data.length,
+        year: monthInfo?.year,
+        month: monthInfo?.month,
+        data: data
+    };
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
 }

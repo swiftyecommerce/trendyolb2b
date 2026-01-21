@@ -191,7 +191,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
                 cart: cart
             };
 
-            await supabase
+            const { error } = await supabase
                 .from('user_data')
                 .upsert({
                     username: user.username,
@@ -199,9 +199,13 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
                     updated_at: new Date().toISOString()
                 }, { onConflict: 'username' });
 
+            if (error) throw error;
+
             console.log('Manual save completed for', user.username);
+            alert('Buluta yedekleme başarıyla tamamlandı! ✅\nŞimdi diğer cihazınızdan sayfayı yenileyebilirsiniz.');
         } catch (error) {
             console.error('Manual save failed:', error);
+            alert(`Yedekleme başarısız oldu! ❌\nHata: ${error instanceof Error ? error.message : 'Bilinmeyen hata'}`);
             throw error;
         }
     }, [user, state, cart]);

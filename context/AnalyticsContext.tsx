@@ -106,26 +106,11 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
 
                     if (result.ok && result.data) {
                         // Restore state from server data
-                        if (result.data.products) {
-                            // Re-build state from raw products if possible, or just set products
-                            // Ideally we should save the 'rawRows' to fully reconstruct, but for now let's trust 'products'
-                            // But wait, the state is complex.
-                            // Let's assume we save the whole state or key parts.
-                            // For simplicity given the scope: save 'products' and re-build state around it?
-                            // Or just save the rawRows if we have them. 
-                            // The state has 'rawRows'. Let's save that!
-
-                            if (result.data.rawRows) {
-                                // Re-process raw rows to ensure consistency
-                                // But we need to separate products and reports.
-                                // Let's assume result.data matches the structure we save.
-
-                                // IMPORTANT: The simplest way is to save 'products' and 'loadedReports' and 'rawRows'.
-                                setState(prevState => ({
-                                    ...prevState,
-                                    ...result.data.state // We will save the whole state object under 'state' key
-                                }));
-                            }
+                        if (result.data.state) {
+                            setState(prevState => ({
+                                ...prevState,
+                                ...result.data.state
+                            }));
                         }
 
                         if (result.data.cart) {

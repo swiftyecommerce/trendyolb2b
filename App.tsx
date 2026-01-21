@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import LoginPage from './components/LoginPage';
 import { AppTab, NotificationAction } from './types';
 import { AnalyticsProvider, useAnalytics } from './context/AnalyticsContext';
 import { NotificationProvider } from './context/NotificationContext';
@@ -13,14 +15,19 @@ import AIRecommendationsView from './components/AIRecommendationsView';
 import PurchaseAdvisorView from './components/PurchaseAdvisorView';
 import {
   LayoutDashboard, ShoppingCart, BarChart3, Package,
-  Database, Settings as SettingsIcon, ChevronDown, Lightbulb, ShoppingBag
+  Database, Settings as SettingsIcon, ChevronDown, Lightbulb, ShoppingBag, LogOut
 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
+  const { user, isAuthenticated, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.DASHBOARD);
   const [isSettingsOpen, setIsSettingsOpen] = useState(true);
   const [analysisFilter, setAnalysisFilter] = useState<NotificationAction | undefined>();
   const { cart, state } = useAnalytics();
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   const navItems = [
     { tab: AppTab.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard },
@@ -62,12 +69,16 @@ const AppContent: React.FC = () => {
       {/* Sidebar */}
       <div className="w-64 border-r border-slate-200 bg-white shrink-0 flex flex-col">
         <div className="p-6">
-          <h1 className="text-2xl font-black text-indigo-700 tracking-tighter">ty.rendPanel</h1>
+          <h1 className="text-2xl font-black text-[#0f172a] tracking-tighter">ty.rendPanel</h1>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Analitik Panel</p>
+          <div className="mt-2 text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded inline-block">
+            👤 {user?.username} ({user?.type === 'persistent' ? 'Kalıcı' : 'Demo'})
+          </div>
         </div>
 
         <nav className="mt-4 px-4 space-y-1.5 flex-grow">
           {navItems.map(item => (
+            // ... NavItem rendering
             <NavItem
               key={item.tab}
               active={activeTab === item.tab}
@@ -78,7 +89,9 @@ const AppContent: React.FC = () => {
             />
           ))}
 
+          {/* ... Settings Toggle ... */}
           <div className="pt-4">
+            {/* ... existing settings toggle code ... */}
             <div
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               className="flex items-center justify-between px-3.5 py-2 text-slate-400 font-black uppercase tracking-[0.1em] text-[10px] cursor-pointer hover:text-slate-600 transition-colors"
@@ -104,26 +117,34 @@ const AppContent: React.FC = () => {
           </div>
         </nav>
 
-        {/* Data Status */}
-        <div className="p-6">
+        {/* User / Data Status */}
+        <div className="p-6 space-y-4">
           <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter mb-1">Yüklü Veri</p>
             <p className="text-lg font-black text-slate-900">{state.products.length.toLocaleString()} ürün</p>
             <p className="text-xs text-slate-500 mt-1">{state.loadedReports.length} rapor yüklü</p>
           </div>
+
+          <button
+            onClick={logout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-semibold text-sm"
+          >
+            <LogOut size={16} />
+            Çıkış Yap
+          </button>
         </div>
       </div>
 
       <main className="flex-grow overflow-y-auto h-screen">
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 h-16 flex items-center justify-between px-8 sticky top-0 z-40">
           <div className="flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse"></div>
+            <div className="h-2 w-2 rounded-full bg-[#0f172a] animate-pulse"></div>
             <span className="text-sm font-black uppercase tracking-widest text-slate-400">ty.rendPanel /</span>
-            <span className="text-sm font-black text-indigo-700 uppercase tracking-widest">{tabLabels[activeTab]}</span>
+            <span className="text-sm font-black text-[#0f172a] uppercase tracking-widest">{tabLabels[activeTab]}</span>
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Notification Panel */}
+            {/* ... existing header content ... */}
             <NotificationPanel onNavigateToTab={handleNavigateToTab} />
 
             {cart.length > 0 && (
@@ -131,8 +152,8 @@ const AppContent: React.FC = () => {
                 onClick={() => handleNavigateToTab(AppTab.CART)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-100 rounded-lg hover:bg-indigo-100 transition-colors"
               >
-                <ShoppingCart size={14} className="text-indigo-600" />
-                <span className="text-xs font-bold text-indigo-700">{cart.length} ürün</span>
+                <ShoppingCart size={14} className="text-[#0f172a]" />
+                <span className="text-xs font-bold text-[#0f172a]">{cart.length} ürün</span>
               </button>
             )}
           </div>
@@ -165,14 +186,14 @@ interface NavItemProps {
 const NavItem: React.FC<NavItemProps> = ({ active, onClick, icon, label, badge, isSubItem }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center justify-between transition-all ${isSubItem ? 'p-2.5 pl-6' : 'p-3.5'} rounded-xl ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-100 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}
+    className={`w-full flex items-center justify-between transition-all ${isSubItem ? 'p-2.5 pl-6' : 'p-3.5'} rounded-xl ${active ? 'bg-[#0f172a] text-white shadow-xl shadow-slate-200 font-black' : 'text-slate-500 hover:bg-slate-50 font-bold'}`}
   >
     <div className="flex items-center gap-3">
       {icon}
       <span className={`tracking-wider ${isSubItem ? 'text-[11px]' : 'text-xs uppercase'}`}>{label}</span>
     </div>
     {badge !== undefined && (
-      <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${active ? 'bg-white text-indigo-600' : 'bg-indigo-600 text-white shadow-md'}`}>
+      <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${active ? 'bg-white text-[#0f172a]' : 'bg-[#0f172a] text-white shadow-md'}`}>
         {badge}
       </span>
     )}
@@ -181,12 +202,15 @@ const NavItem: React.FC<NavItemProps> = ({ active, onClick, icon, label, badge, 
 
 const App: React.FC = () => {
   return (
-    <AnalyticsProvider>
-      <NotificationProvider>
-        <AppContent />
-      </NotificationProvider>
-    </AnalyticsProvider>
+    <AuthProvider>
+      <AnalyticsProvider>
+        <NotificationProvider>
+          <AppContent />
+        </NotificationProvider>
+      </AnalyticsProvider>
+    </AuthProvider>
   );
 };
+
 
 export default App;

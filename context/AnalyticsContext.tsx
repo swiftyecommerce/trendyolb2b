@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode, useRef } from 'react';
+import { useAuth } from './AuthContext';
 import type {
     AnalyticsState,
     AppSettings,
@@ -89,6 +90,103 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
     const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
     const [cart, setCart] = useState<CartItem[]>(() => loadCart());
     const [isLoading, setIsLoading] = useState(false);
+
+    // Auth integration
+    const { user } = useAuth();
+    const isInitialLoad = useRef(true);
+
+    // Load data from server when user logs in (if persistent)
+    useEffect(() => {
+        const loadUserData = async () => {
+            if (user?.type === 'persistent') {
+                setIsLoading(true);
+                try {
+                    const response = await fetch(`http://localhost:3001/api/data/load/${user.username}`);
+                    const result = await response.json();
+
+                    if (result.ok && result.data) {
+                        // Restore state from server data
+                        if (result.data.products) {
+                            // Re-build state from raw products if possible, or just set products
+                            // Ideally we should save the 'rawRows' to fully reconstruct, but for now let's trust 'products'
+                            // But wait, the state is complex.
+                            // Let's assume we save the whole state or key parts.
+                            // For simplicity given the scope: save 'products' and re-build state around it?
+                            // Or just save the rawRows if we have them. 
+                            // The state has 'rawRows'. Let's save that!
+
+                            if (result.data.rawRows) {
+                                // Re-process raw rows to ensure consistency
+                                // But we need to separate products and reports.
+                                // Let's assume result.data matches the structure we save.
+
+                                // IMPORTANT: The simplest way is to save 'products' and 'loadedReports' and 'rawRows'.
+                                setState(prevState => ({
+                                    ...prevState,
+                                    ...result.data.state // We will save the whole state object under 'state' key
+                                }));
+                            }
+                        }
+
+                        if (result.data.cart) {
+                            setCart(result.data.cart);
+                        }
+                        console.log('Data loaded from server for', user.username);
+                    }
+                } catch (error) {
+                    console.error('Failed to load user data:', error);
+                } finally {
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        if (user) {
+            loadUserData();
+        }
+    }, [user]);
+
+    // Save data to server when it changes (debounced)
+    useEffect(() => {
+        if (isInitialLoad.current) {
+            isInitialLoad.current = false;
+            return;
+        }
+
+        if (user?.type === 'persistent') {
+            const saveData = async () => {
+                try {
+                    // We save the essential parts of state to reconstruct it
+                    const dataToSave = {
+                        state: {
+                            products: state.products,
+                            loadedReports: state.loadedReports,
+                            rawRows: state.rawRows, // If this is too huge might be an issue, but local-server can handle it
+                            byProduct: state.byProduct,
+                            byDate: state.byDate,
+                            lastUpdatedAt: state.lastUpdatedAt
+                        },
+                        cart: cart
+                    };
+
+                    await fetch('http://localhost:3001/api/data/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            username: user.username,
+                            data: dataToSave
+                        })
+                    });
+                    console.log('Data saved to server for', user.username);
+                } catch (error) {
+                    console.error('Failed to save user data:', error);
+                }
+            };
+
+            const timeoutId = setTimeout(saveData, 2000); // 2 second debounce
+            return () => clearTimeout(timeoutId);
+        }
+    }, [state, cart, user]);
 
     // Cached report data by period
     const reportDataByPeriod = useMemo(() => {

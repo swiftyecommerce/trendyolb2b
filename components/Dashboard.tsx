@@ -7,6 +7,7 @@ import { useAnalytics } from '../context/AnalyticsContext';
 import { formatCurrency, formatNumber, formatPercent } from '../lib/excelParser';
 import { AppTab } from '../types';
 import CategoryMultiSelect from './CategoryMultiSelect';
+import RecommendationsPanel from './RecommendationsPanel';
 
 interface DashboardProps {
   onNavigateToTab?: (tab: AppTab) => void;
@@ -219,6 +220,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToTab }) => {
             icon={<Target className="w-4 h-4 text-amber-600" />}
           />
         </div>
+      )}
+
+      {/* AI Recommendations Panel */}
+      {hasData && (
+        <RecommendationsPanel maxItems={5} showHeader={true} />
       )}
 
       {/* Empty State */}

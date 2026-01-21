@@ -41,7 +41,7 @@ interface AnalyticsContextType {
     // Actions
     refreshData: () => void;
     uploadProductList: (file: ArrayBuffer) => Promise<number>;
-    uploadSalesReport: (file: ArrayBuffer, period: ReportPeriod) => Promise<number>;
+    uploadSalesReport: (file: ArrayBuffer, period: ReportPeriod, monthInfo?: { year: number; month: number }) => Promise<number>;
     clearAllData: () => void;
     updateSettings: (settings: Partial<AppSettings>) => void;
 
@@ -141,14 +141,18 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         }
     }, [refreshData]);
 
-    const uploadSalesReport = useCallback(async (file: ArrayBuffer, period: ReportPeriod): Promise<number> => {
+    const uploadSalesReport = useCallback(async (
+        file: ArrayBuffer,
+        period: ReportPeriod,
+        monthInfo?: { year: number; month: number }
+    ): Promise<number> => {
         setIsLoading(true);
         try {
             const rows = parseSalesReportExcel(file, period);
             if (rows.length === 0) {
                 throw new Error('Dosyada geçerli satış verisi bulunamadı');
             }
-            saveReport(period, rows);
+            saveReport(period, rows, monthInfo);
             refreshData();
             return rows.length;
         } finally {

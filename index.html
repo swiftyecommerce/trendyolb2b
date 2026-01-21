@@ -1,25 +1,50 @@
-
 <!DOCTYPE html>
 <html lang="tr">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VizyonExcel - Trendyol Satış Analizi</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      body {
-        font-family: 'Inter', sans-serif;
-      }
-      @media print {
-        .no-print {
-          display: none !important;
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ty.rendPanel - Trendyol Satış Analizi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            // Override indigo with Slate/Dark theme (#0f172a)
+            indigo: {
+              50: '#f8fafc',  // slate-50
+              100: '#f1f5f9', // slate-100
+              200: '#e2e8f0', // slate-200
+              300: '#cbd5e1', // slate-300
+              400: '#94a3b8', // slate-400
+              500: '#334155', // slate-700
+              600: '#0f172a', // TARGET COLOR (slate-900) - Primary Action
+              700: '#020617', // slate-950
+              800: '#0f172a', // slate-900
+              900: '#020617', // slate-950
+            }
+          }
         }
-        .print-only {
-          display: block !important;
-        }
       }
-    </style>
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+
+      .print-only {
+        display: block !important;
+      }
+    }
+  </style>
   <script type="importmap">
 {
   "imports": {
@@ -34,10 +59,12 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
+  <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-slate-50 text-slate-900">
-    <div id="root"></div>
+
+<body class="bg-slate-50 text-slate-900">
+  <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>

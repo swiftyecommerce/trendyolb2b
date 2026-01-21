@@ -1,26 +1,33 @@
 import React, { useState } from 'react';
-import { AppTab } from './types';
+import { AppTab, NotificationAction } from './types';
 import { AnalyticsProvider, useAnalytics } from './context/AnalyticsContext';
+import { NotificationProvider } from './context/NotificationContext';
 import Dashboard from './components/Dashboard';
 import AnalysisView from './components/AnalysisView';
 import ProductsView from './components/ProductsView';
 import CartView from './components/CartView';
 import DataManagement from './components/DataManagement';
 import Settings from './components/Settings';
+import NotificationPanel from './components/NotificationPanel';
+import AIRecommendationsView from './components/AIRecommendationsView';
+import PurchaseAdvisorView from './components/PurchaseAdvisorView';
 import {
   LayoutDashboard, ShoppingCart, BarChart3, Package,
-  Database, Settings as SettingsIcon, ChevronDown
+  Database, Settings as SettingsIcon, ChevronDown, Lightbulb, ShoppingBag
 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AppTab>(AppTab.DASHBOARD);
   const [isSettingsOpen, setIsSettingsOpen] = useState(true);
+  const [analysisFilter, setAnalysisFilter] = useState<NotificationAction | undefined>();
   const { cart, state } = useAnalytics();
 
   const navItems = [
     { tab: AppTab.DASHBOARD, label: 'Dashboard', icon: LayoutDashboard },
     { tab: AppTab.ANALYSIS, label: 'Analiz', icon: BarChart3 },
     { tab: AppTab.PRODUCTS, label: 'Ürünler', icon: Package },
+    { tab: AppTab.AI_RECOMMENDATIONS, label: 'AI Önerileri', icon: Lightbulb },
+    { tab: AppTab.PURCHASE_ADVISOR, label: 'Sipariş Danışmanı', icon: ShoppingBag },
     { tab: AppTab.CART, label: 'Sepet', icon: ShoppingCart, badge: cart.length > 0 ? cart.length : undefined },
   ];
 
@@ -34,8 +41,20 @@ const AppContent: React.FC = () => {
     [AppTab.ANALYSIS]: 'Analiz',
     [AppTab.PRODUCTS]: 'Ürünler',
     [AppTab.CART]: 'Sipariş Sepeti',
+    [AppTab.AI_RECOMMENDATIONS]: 'AI Önerileri',
+    [AppTab.PURCHASE_ADVISOR]: 'Sipariş Danışmanı',
     [AppTab.DATA_MANAGEMENT]: 'Veri Yönetimi',
     [AppTab.SETTINGS]: 'Ayarlar',
+  };
+
+  // Navigation handler with actionRoute support for notifications
+  const handleNavigateToTab = (tab: AppTab, actionRoute?: NotificationAction) => {
+    setActiveTab(tab);
+    if (tab === AppTab.ANALYSIS && actionRoute) {
+      setAnalysisFilter(actionRoute);
+    } else {
+      setAnalysisFilter(undefined);
+    }
   };
 
   return (
@@ -43,7 +62,7 @@ const AppContent: React.FC = () => {
       {/* Sidebar */}
       <div className="w-64 border-r border-slate-200 bg-white shrink-0 flex flex-col">
         <div className="p-6">
-          <h1 className="text-2xl font-black text-indigo-700 tracking-tighter italic">VizyonExcel</h1>
+          <h1 className="text-2xl font-black text-indigo-700 tracking-tighter">ty.rendPanel</h1>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Analitik Panel</p>
         </div>
 
@@ -52,7 +71,7 @@ const AppContent: React.FC = () => {
             <NavItem
               key={item.tab}
               active={activeTab === item.tab}
-              onClick={() => setActiveTab(item.tab)}
+              onClick={() => handleNavigateToTab(item.tab)}
               icon={<item.icon size={18} />}
               label={item.label}
               badge={item.badge}
@@ -74,7 +93,7 @@ const AppContent: React.FC = () => {
                   <NavItem
                     key={item.tab}
                     active={activeTab === item.tab}
-                    onClick={() => setActiveTab(item.tab)}
+                    onClick={() => handleNavigateToTab(item.tab)}
                     icon={<item.icon size={16} />}
                     label={item.label}
                     isSubItem
@@ -99,14 +118,17 @@ const AppContent: React.FC = () => {
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 h-16 flex items-center justify-between px-8 sticky top-0 z-40">
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse"></div>
-            <span className="text-sm font-black uppercase tracking-widest text-slate-400">VizyonExcel /</span>
+            <span className="text-sm font-black uppercase tracking-widest text-slate-400">ty.rendPanel /</span>
             <span className="text-sm font-black text-indigo-700 uppercase tracking-widest">{tabLabels[activeTab]}</span>
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Notification Panel */}
+            <NotificationPanel onNavigateToTab={handleNavigateToTab} />
+
             {cart.length > 0 && (
               <button
-                onClick={() => setActiveTab(AppTab.CART)}
+                onClick={() => handleNavigateToTab(AppTab.CART)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-100 rounded-lg hover:bg-indigo-100 transition-colors"
               >
                 <ShoppingCart size={14} className="text-indigo-600" />
@@ -117,10 +139,12 @@ const AppContent: React.FC = () => {
         </header>
 
         <div className="p-8 pb-32">
-          {activeTab === AppTab.DASHBOARD && <Dashboard onNavigateToTab={setActiveTab} />}
-          {activeTab === AppTab.ANALYSIS && <AnalysisView />}
+          {activeTab === AppTab.DASHBOARD && <Dashboard onNavigateToTab={handleNavigateToTab} />}
+          {activeTab === AppTab.ANALYSIS && <AnalysisView initialFilter={analysisFilter} />}
           {activeTab === AppTab.PRODUCTS && <ProductsView />}
           {activeTab === AppTab.CART && <CartView />}
+          {activeTab === AppTab.AI_RECOMMENDATIONS && <AIRecommendationsView />}
+          {activeTab === AppTab.PURCHASE_ADVISOR && <PurchaseAdvisorView />}
           {activeTab === AppTab.DATA_MANAGEMENT && <DataManagement />}
           {activeTab === AppTab.SETTINGS && <Settings />}
         </div>
@@ -158,7 +182,9 @@ const NavItem: React.FC<NavItemProps> = ({ active, onClick, icon, label, badge, 
 const App: React.FC = () => {
   return (
     <AnalyticsProvider>
-      <AppContent />
+      <NotificationProvider>
+        <AppContent />
+      </NotificationProvider>
     </AnalyticsProvider>
   );
 };

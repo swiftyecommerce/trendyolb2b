@@ -216,16 +216,38 @@ export function loadStoredData(): ExcelDataStore {
     return { reports: {} };
 }
 
-export function saveReport(period: ReportPeriod, data: RawSaleRow[]): void {
+export function saveReport(
+    period: ReportPeriod,
+    data: RawSaleRow[],
+    monthInfo?: { year: number; month: number }
+): void {
     const store = loadStoredData();
 
-    // OVERWRITE existing report of same period
-    store.reports[period] = {
-        period,
-        uploadDate: new Date().toISOString(),
-        rowCount: data.length,
-        data
-    };
+    // Generate storage key - use year-month for historical data
+    const storageKey = monthInfo
+        ? `monthly_${monthInfo.year}_${monthInfo.month}`
+        : period;
+
+    // For historical monthly data, ONLY store metadata (no raw data)
+    // This prevents localStorage quota issues
+    if (monthInfo) {
+        store.reports[storageKey] = {
+            period: 'monthly',
+            uploadDate: new Date().toISOString(),
+            rowCount: data.length,
+            year: monthInfo.year,
+            month: monthInfo.month
+            // NO data field for historical uploads
+        };
+    } else {
+        // For current period reports, store the data
+        store.reports[storageKey] = {
+            period,
+            uploadDate: new Date().toISOString(),
+            rowCount: data.length,
+            data
+        };
+    }
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
 }
@@ -464,16 +486,23 @@ export function buildAnalyticsState(): AnalyticsState {
     const allRows: RawSaleRow[] = [];
     const loadedReports: AnalyticsState['loadedReports'] = [];
 
-    for (const period of ['daily', 'weekly', 'monthly', 'yearly'] as ReportPeriod[]) {
-        const report = store.reports[period];
-        if (report && report.data) {
+    // Iterate over ALL reports (current periods + historical monthly)
+    for (const [key, report] of Object.entries(store.reports)) {
+        if (!report) continue;
+
+        // Only add data rows if they exist (historical months don't have data)
+        if (report.data) {
             allRows.push(...report.data);
-            loadedReports.push({
-                period: report.period,
-                uploadDate: report.uploadDate,
-                rowCount: report.rowCount
-            });
         }
+
+        // Add to loadedReports with year/month info if available
+        loadedReports.push({
+            period: report.period,
+            uploadDate: report.uploadDate,
+            rowCount: report.rowCount,
+            year: report.year,
+            month: report.month
+        });
     }
 
     // Get product list for stock info

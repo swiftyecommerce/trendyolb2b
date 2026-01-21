@@ -11,7 +11,9 @@
   "dependencies": {
     "@google/genai": "^1.37.0",
     "@supabase/supabase-js": "^2.91.0",
+    "@vercel/node": "^5.5.25",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "lucide-react": "^0.562.0",
     "node-cron": "^4.2.1",

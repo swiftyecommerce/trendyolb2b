@@ -105,18 +105,22 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
                     const result = await response.json();
 
                     if (result.ok && result.data) {
-                        // Restore state from server data
-                        if (result.data.state) {
-                            setState(prevState => ({
-                                ...prevState,
-                                ...result.data.state
-                            }));
+                        // 1. Restore localStorage first (Source of Truth)
+                        if (result.data.store) {
+                            localStorage.setItem('vizyonexcel_data', JSON.stringify(result.data.store));
                         }
 
+                        // 2. Restore Cart
                         if (result.data.cart) {
                             setCart(result.data.cart);
                         }
-                        console.log('Data loaded from server for', user.username);
+
+                        // 3. Rebuild State from restored localStorage
+                        // We don't need to manually set state from result.data.state anymore
+                        // because refreshData() will read from the localStorage we just restored.
+                        refreshData();
+
+                        console.log('Data loaded and restored from server for', user.username);
                     }
                 } catch (error) {
                     console.error('Failed to load user data:', error);
@@ -142,13 +146,13 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
             const saveData = async () => {
                 try {
                     // We save the essential parts of state to reconstruct it
+                    // AND the raw storage so excelParser works on other devices
+                    const currentStore = loadStoredData();
+
                     const dataToSave = {
+                        store: currentStore, // Sync the raw storage
                         state: {
-                            products: state.products,
-                            loadedReports: state.loadedReports,
-                            rawRows: state.rawRows, // If this is too huge might be an issue, but local-server can handle it
-                            byProduct: state.byProduct,
-                            byDate: state.byDate,
+                            // Keep saving state just in case, or for faster lightweight loads later
                             lastUpdatedAt: state.lastUpdatedAt
                         },
                         cart: cart
@@ -162,7 +166,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
                             data: dataToSave
                         })
                     });
-                    console.log('Data saved to server for', user.username);
+                    console.log('Data (Store + Cart) saved to server for', user.username);
                 } catch (error) {
                     console.error('Failed to save user data:', error);
                 }

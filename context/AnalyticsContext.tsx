@@ -42,6 +42,7 @@ interface AnalyticsContextType {
 
     // Actions
     refreshData: () => void;
+    saveData: () => Promise<void>;
     uploadProductList: (file: ArrayBuffer) => Promise<number>;
     uploadSalesReport: (file: ArrayBuffer, period: ReportPeriod, monthInfo?: { year: number; month: number }) => Promise<number>;
     clearAllData: () => void;
@@ -177,6 +178,33 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
             return () => clearTimeout(timeoutId);
         }
     }, [state, cart, user]);
+
+    // Force Manual Save Function exposed to context
+    const saveData = useCallback(async () => {
+        if (user?.type !== 'persistent') return;
+
+        try {
+            const currentStore = loadStoredData();
+            const dataToSave = {
+                store: currentStore,
+                state: { lastUpdatedAt: state.lastUpdatedAt },
+                cart: cart
+            };
+
+            await supabase
+                .from('user_data')
+                .upsert({
+                    username: user.username,
+                    data: dataToSave,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'username' });
+
+            console.log('Manual save completed for', user.username);
+        } catch (error) {
+            console.error('Manual save failed:', error);
+            throw error;
+        }
+    }, [user, state, cart]);
 
     // Cached report data by period
     const reportDataByPeriod = useMemo(() => {
@@ -381,6 +409,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         isLoading,
         categories,
         refreshData,
+        saveData,
         uploadProductList,
         uploadSalesReport,
         clearAllData,

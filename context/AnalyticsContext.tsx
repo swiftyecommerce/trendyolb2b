@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode, useRef } from 'react';
 import { useAuth } from './AuthContext';
+import { supabase } from '../lib/supabase';
 import type {
     AnalyticsState,
     AppSettings,
@@ -158,15 +159,15 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
                         cart: cart
                     };
 
-                    await fetch('/api/data/save', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
+                    await supabase
+                        .from('user_data')
+                        .upsert({
                             username: user.username,
-                            data: dataToSave
-                        })
-                    });
-                    console.log('Data (Store + Cart) saved to server for', user.username);
+                            data: dataToSave,
+                            updated_at: new Date().toISOString()
+                        }, { onConflict: 'username' });
+
+                    console.log('Data saved (Direct Supabase) for', user.username);
                 } catch (error) {
                     console.error('Failed to save user data:', error);
                 }

@@ -162,7 +162,7 @@ const PurchaseAdvisorView: React.FC = () => {
             </div>
 
             {/* Quick Stats */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div
                     onClick={() => setActiveTab('buy')}
                     className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${activeTab === 'buy'

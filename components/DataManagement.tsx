@@ -17,6 +17,9 @@ const MONTH_NAMES = [
     'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
 ];
 
+import { CloudUpload } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+
 const CURRENT_PERIODS: { value: ReportPeriod; label: string; days: number }[] = [
     { value: 'daily', label: '1 Günlük', days: 1 },
     { value: 'weekly', label: '7 Günlük', days: 7 },
@@ -28,7 +31,8 @@ const CURRENT_PERIODS: { value: ReportPeriod; label: string; days: number }[] = 
 // ============================================
 
 const DataManagement: React.FC = () => {
-    const { state, uploadProductList, uploadSalesReport, clearAllData, refreshData, isLoading } = useAnalytics();
+    const { state, uploadProductList, uploadSalesReport, clearAllData, refreshData, isLoading, saveData } = useAnalytics();
+    const { user } = useAuth();
 
     // View state
     const [activeSection, setActiveSection] = useState<'current' | 'historical'>('current');
@@ -165,6 +169,20 @@ const DataManagement: React.FC = () => {
                         <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                         Yenile
                     </button>
+                    {user?.type === 'persistent' && (
+                        <button
+                            onClick={() => {
+                                if (confirm('Veriler manuel olarak buluta yedeklensin mi?')) {
+                                    saveData();
+                                    alert('Yedekleme başlatıldı.');
+                                }
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"
+                        >
+                            <CloudUpload className="w-4 h-4" />
+                            Buluta Yedekle
+                        </button>
+                    )}
                     <button
                         onClick={handleClearAll}
                         className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
@@ -236,8 +254,8 @@ const DataManagement: React.FC = () => {
                             <button
                                 onClick={() => setUploadType('products')}
                                 className={`flex-1 py-2.5 px-4 rounded-lg font-medium text-sm transition-all ${uploadType === 'products'
-                                        ? 'bg-indigo-600 text-white'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                     }`}
                             >
                                 Ürün Listesi
@@ -245,8 +263,8 @@ const DataManagement: React.FC = () => {
                             <button
                                 onClick={() => setUploadType('report')}
                                 className={`flex-1 py-2.5 px-4 rounded-lg font-medium text-sm transition-all ${uploadType === 'report'
-                                        ? 'bg-indigo-600 text-white'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                                     }`}
                             >
                                 Satış Raporu
@@ -261,8 +279,8 @@ const DataManagement: React.FC = () => {
                                         key={period.value}
                                         onClick={() => setSelectedPeriod(period.value)}
                                         className={`py-2.5 px-3 rounded-lg text-sm font-medium transition-all ${selectedPeriod === period.value
-                                                ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
-                                                : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                                            ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
+                                            : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                                             }`}
                                     >
                                         {period.label}

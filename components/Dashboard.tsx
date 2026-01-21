@@ -146,7 +146,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToTab }) => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard
           title="Toplam Ciro"
           value={formatCurrency(kpis.totalRevenue)}
@@ -174,7 +174,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToTab }) => {
       </div>
 
       {/* Secondary KPIs */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <p className="text-sm text-slate-500">Ort. Sipariş Değeri</p>
           <p className="text-xl font-bold text-slate-900 mt-1">{formatCurrency(kpis.aov)}</p>
@@ -197,7 +197,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateToTab }) => {
 
       {/* Top Lists */}
       {hasData && (
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <TopList
             title="En Çok Ciro"
             items={topByCiro}

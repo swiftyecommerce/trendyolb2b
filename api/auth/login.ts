@@ -1,0 +1,39 @@
+import { VercelRequest, VercelResponse } from '@vercel/node';
+
+export default function handler(req: VercelRequest, res: VercelResponse) {
+    // Enable CORS
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader(
+        'Access-Control-Allow-Headers',
+        'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+    );
+
+    if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return;
+    }
+
+    if (req.method === 'POST') {
+        const { username, password } = req.body;
+
+        if (username === 'serhat' && password === '123456') {
+            return res.status(200).json({
+                ok: true,
+                user: { username: 'serhat', type: 'persistent' }
+            });
+        }
+
+        if (username === 'demo' && password === 'demo') {
+            return res.status(200).json({
+                ok: true,
+                user: { username: 'demo', type: 'session' }
+            });
+        }
+
+        return res.status(401).json({ ok: false, error: 'Geçersiz kullanıcı adı veya şifre' });
+    }
+
+    res.status(405).json({ error: 'Method not allowed' });
+}

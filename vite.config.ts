@@ -12,10 +12,17 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true,
+          secure: false,
         }
       }
     },
     plugins: [react()],
+    optimizeDeps: {
+      // This section was added based on the user's instruction,
+      // but the original snippet for optimizeDeps was syntactically incorrect.
+      // Assuming the intent was to add an empty optimizeDeps object or specific entries.
+      // For now, it's left as an empty object to maintain valid syntax.
+    },
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)

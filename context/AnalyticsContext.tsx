@@ -101,7 +101,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
             if (user?.type === 'persistent') {
                 setIsLoading(true);
                 try {
-                    const response = await fetch(`http://localhost:3001/api/data/load/${user.username}`);
+                    const response = await fetch(`/api/data/load/${user.username}`);
                     const result = await response.json();
 
                     if (result.ok && result.data) {
@@ -169,7 +169,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
                         cart: cart
                     };
 
-                    await fetch('http://localhost:3001/api/data/save', {
+                    await fetch('/api/data/save', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

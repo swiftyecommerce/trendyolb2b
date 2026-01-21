@@ -1,10 +1,19 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClient } from '@supabase/supabase-js';
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+const SUPABASE_URL = 'https://btmofcirhoremttsmawo.supabase.co';
+const SUPABASE_KEY = 'sb_secret__no6391b4QREilyyU0OI2w_rUevkEd2';
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Enable CORS
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader(
+        'Access-Control-Allow-Headers',
+        'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+    );
 
     if (req.method === 'OPTIONS') {
         res.status(200).end();
@@ -18,15 +27,27 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(200).json({ ok: true, data: null });
         }
 
-        // On Vercel, since we can't read what we saved (ephemeral), 
-        // we return null (no saved data) to avoid errors.
-        console.log(`[Data] Load attempted for user: ${username} (Vercel Ephemeral)`);
+        try {
+            const { data: dbData, error } = await supabase
+                .from('user_data')
+                .select('data')
+                .eq('username', username)
+                .single();
 
-        return res.status(200).json({
-            ok: true,
-            data: null,
-            message: 'No persistent data on Vercel serverless environment'
-        });
+            if (error && error.code !== 'PGRST116') {
+                console.error('[Supabase Load Error]', error);
+                return res.status(500).json({ ok: false, error: error.message });
+            }
+
+            if (!dbData) {
+                return res.status(200).json({ ok: true, data: null });
+            }
+
+            return res.status(200).json({ ok: true, data: dbData.data });
+        } catch (err: any) {
+            console.error('[Supabase Load Error]', err);
+            return res.status(500).json({ ok: false, error: err.message });
+        }
     }
 
     res.status(405).json({ error: 'Method not allowed' });

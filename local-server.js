@@ -1,11 +1,16 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
-import { promises as fs } from 'fs';
 import { fileURLToPath } from 'url';
+import { createClient } from '@supabase/supabase-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Supabase Configuration
+const SUPABASE_URL = 'https://btmofcirhoremttsmawo.supabase.co';
+const SUPABASE_KEY = 'sb_secret__no6391b4QREilyyU0OI2w_rUevkEd2';
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const app = express();
 const PORT = 3001;
@@ -13,9 +18,8 @@ const PORT = 3001;
 app.use(cors());
 app.use(express.json());
 
-// Ensure data directory exists
-const DATA_DIR = path.join(__dirname, 'data');
-fs.mkdir(DATA_DIR, { recursive: true }).catch(console.error);
+
+
 
 // Trendyol Test Connection Endpoint
 app.post('/api/trendyol/test-connection', async (req, res) => {
@@ -137,10 +141,20 @@ app.post('/api/data/save', async (req, res) => {
             return res.json({ ok: true, message: 'Skipped saving for non-persistent user' });
         }
 
-        const filePath = path.join(DATA_DIR, `${username}_data.json`);
-        await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+        const { error } = await supabase
+            .from('user_data')
+            .upsert({
+                username: username,
+                data: data,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'username' });
 
-        console.log(`[Data] Saved data for user: ${username}`);
+        if (error) {
+            console.error('[Supabase Save Error]', error);
+            throw error;
+        }
+
+        console.log(`[Data] Saved data for user: ${username} to Supabase`);
         res.json({ ok: true });
 
     } catch (err) {
@@ -158,19 +172,24 @@ app.get('/api/data/load/:username', async (req, res) => {
             return res.json({ ok: true, data: null });
         }
 
-        const filePath = path.join(DATA_DIR, `${username}_data.json`);
+        const { data: dbData, error } = await supabase
+            .from('user_data')
+            .select('data')
+            .eq('username', username)
+            .single();
 
-        try {
-            const fileContent = await fs.readFile(filePath, 'utf-8');
-            const data = JSON.parse(fileContent);
-            console.log(`[Data] Loaded data for user: ${username}`);
-            res.json({ ok: true, data });
-        } catch (err) {
-            if (err.code === 'ENOENT') {
-                return res.json({ ok: true, data: null });
-            }
-            throw err;
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "Row not found" (0 rows)
+            console.error('[Supabase Load Error]', error);
+            throw error;
         }
+
+        if (!dbData) {
+            console.log(`[Data] No data found for user: ${username}`);
+            return res.json({ ok: true, data: null });
+        }
+
+        console.log(`[Data] Loaded data for user: ${username} from Supabase`);
+        res.json({ ok: true, data: dbData.data });
 
     } catch (err) {
         console.error('[Data Load Error]', err);

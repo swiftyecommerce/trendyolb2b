@@ -163,7 +163,7 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({
     return (
         <div className="space-y-4">
             {/* Header */}
-            <div className="flex items-start justify-between">
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                 <div>
                     <h3 className="text-lg font-bold text-slate-900">{title}</h3>
                     {description && (
@@ -192,7 +192,7 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
                 <table className="w-full border-collapse">
                     <thead className="bg-slate-50 border-b border-slate-300">
                         <tr>

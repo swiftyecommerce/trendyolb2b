@@ -165,7 +165,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ initialFilter }) => {
                 </div>
 
                 {/* Filters */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                     {hasActiveFilter && (
                         <button
                             onClick={clearFilters}
@@ -720,7 +720,7 @@ const OverviewTab: React.FC<{ products: ProductStats[] }> = ({ products }) => {
         .sort((a, b) => a.conversionRate - b.conversionRate).slice(0, 10);
 
     return (
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <ProductTable title="En Çok Ciro" products={topByCiro} highlightKey="totalRevenue" />
             <ProductTable title="En Çok Satış" products={topBySales} highlightKey="totalQuantity" />
             <ProductTable title="En Yüksek Dönüşüm" products={topByConversion} highlightKey="conversionRate" />
@@ -765,7 +765,7 @@ const OpportunitiesTab: React.FC<{
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
                 <table className="w-full border-collapse">
                     <thead className="bg-slate-50 border-b border-slate-300">
                         <tr>
@@ -867,7 +867,7 @@ const StockTab: React.FC<{
     return (
         <div className="space-y-4">
             {/* Status Cards */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-red-50 rounded-xl p-4 border border-red-200">
                     <div className="flex items-center gap-2">
                         <AlertTriangle className="w-5 h-5 text-red-600" />
@@ -932,8 +932,8 @@ const StockTab: React.FC<{
                                 <tr
                                     key={rec.modelKodu}
                                     className={`border-t border-slate-100 ${rec.urgency === 'critical' ? 'bg-red-50' :
-                                            rec.urgency === 'warning' ? 'bg-amber-50' :
-                                                idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'
+                                        rec.urgency === 'warning' ? 'bg-amber-50' :
+                                            idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'
                                         }`}
                                 >
                                     <td className="p-3 border-r border-slate-200/50">
@@ -1052,7 +1052,7 @@ const SegmentsTab: React.FC<{
                 </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {(['A', 'B', 'C'] as const).map(seg => (
                     <button
                         key={seg}

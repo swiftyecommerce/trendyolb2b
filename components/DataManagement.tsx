@@ -103,7 +103,7 @@ const DataManagement: React.FC = () => {
         try {
             const buffer = await file.arrayBuffer();
 
-            if (uploadType === 'products') {
+            if (uploadType === 'products' && !selectedMonth) {
                 // Upload product list (for stock, price info)
                 const count = await uploadProductList(buffer);
                 setUploadStatus({ status: 'success', message: `${formatNumber(count)} ürün yüklendi!` });
@@ -456,6 +456,7 @@ const DataManagement: React.FC = () => {
                                             if (!isFutureMonth && !data) {
                                                 setSelectedMonth(monthNum);
                                                 setSelectedPeriod('monthly');
+                                                setUploadType('report'); // Force report mode
                                             }
                                         }}
                                         className={`relative p-4 rounded-xl border-2 transition-all cursor-pointer ${data

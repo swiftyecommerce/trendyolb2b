@@ -247,7 +247,7 @@ const CartView: React.FC = () => {
 
   return (
     <div className="max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Sipariş Sepeti</h1>
           <p className="text-sm text-slate-500 mt-1">
@@ -296,7 +296,7 @@ const CartView: React.FC = () => {
       ) : (
         <>
           {/* Cart Items */}
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50">
                 <tr>
@@ -376,7 +376,7 @@ const CartView: React.FC = () => {
 
           {/* Total Summary */}
           <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-6 text-white">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <p className="text-indigo-100 text-sm">Toplam Sipariş Tutarı</p>
                 <p className="text-4xl font-bold mt-1">{formatCurrency(totalCost)}</p>

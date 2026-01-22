@@ -255,7 +255,8 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
 
                 // 3. Rebuild State
                 refreshData();
-                alert('Veriler buluttan başarıyla indirildi! ✅');
+                alert('Veriler buluttan başarıyla indirildi! ✅\nSayfa yenileniyor...');
+                window.location.reload();
             } else {
                 alert('Bulutta kayıtlı veri bulunamadı.');
             }

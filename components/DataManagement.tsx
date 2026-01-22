@@ -372,8 +372,10 @@ const DataManagement: React.FC = () => {
                                     <span className="text-lg font-bold text-slate-900">{formatNumber(state.products.length)}</span>
                                 </div>
 
-                                {/* Current period reports */}
-                                {state.loadedReports.filter(r => ['daily', 'weekly', 'monthly'].includes(r.period)).map((report, idx) => (
+                                {/* Current period reports (exclude historical items) */}
+                                {state.loadedReports.filter(r =>
+                                    ['daily', 'weekly', 'monthly'].includes(r.period) && !r.year
+                                ).map((report, idx) => (
                                     <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                                         <div className="flex items-center gap-2">
                                             <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">

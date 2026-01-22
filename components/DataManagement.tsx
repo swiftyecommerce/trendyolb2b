@@ -17,7 +17,7 @@ const MONTH_NAMES = [
     'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
 ];
 
-import { CloudUpload } from 'lucide-react';
+import { CloudUpload, CloudDownload } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const CURRENT_PERIODS: { value: ReportPeriod; label: string; days: number }[] = [
@@ -31,7 +31,7 @@ const CURRENT_PERIODS: { value: ReportPeriod; label: string; days: number }[] = 
 // ============================================
 
 const DataManagement: React.FC = () => {
-    const { state, uploadProductList, uploadSalesReport, clearAllData, refreshData, isLoading, saveData } = useAnalytics();
+    const { state, uploadProductList, uploadSalesReport, clearAllData, refreshData, isLoading, saveData, restoreData } = useAnalytics();
     const { user } = useAuth();
 
     // View state

@@ -43,6 +43,7 @@ interface AnalyticsContextType {
     // Actions
     refreshData: () => void;
     saveData: () => Promise<void>;
+    restoreData: () => Promise<void>;
     uploadProductList: (file: ArrayBuffer) => Promise<number>;
     uploadSalesReport: (file: ArrayBuffer, period: ReportPeriod, monthInfo?: { year: number; month: number }) => Promise<number>;
     clearAllData: () => void;
@@ -126,6 +127,10 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
                     }
                 } catch (error) {
                     console.error('Failed to load user data:', error);
+                    // Mobile debug: Show alert on load failure
+                    if (confirm('Veriler sunucudan otomatik yüklenemedi. Tekrar denemek ister misiniz?')) {
+                        window.location.reload();
+                    }
                 } finally {
                     setIsLoading(false);
                 }
@@ -209,6 +214,46 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
             throw error;
         }
     }, [user, state, cart]);
+
+    const restoreData = useCallback(async () => {
+        if (!user?.username) return;
+        setIsLoading(true);
+        try {
+            // Direct Supabase Load
+            const { data: dbData, error } = await supabase
+                .from('user_data')
+                .select('data')
+                .eq('username', user.username)
+                .single();
+
+            if (error) throw error;
+
+            if (dbData && dbData.data) {
+                const loadedData = dbData.data;
+
+                // 1. Restore localStorage
+                if (loadedData.store) {
+                    localStorage.setItem('vizyonexcel_data', JSON.stringify(loadedData.store));
+                }
+
+                // 2. Restore Cart
+                if (loadedData.cart) {
+                    setCart(loadedData.cart);
+                }
+
+                // 3. Rebuild State
+                refreshData();
+                alert('Veriler buluttan başarıyla indirildi! ✅');
+            } else {
+                alert('Bulutta kayıtlı veri bulunamadı.');
+            }
+        } catch (error) {
+            console.error('Restore failed:', error);
+            alert(`Veri indirme başarısız! ❌\nHata: ${error instanceof Error ? error.message : 'Bilinmeyen hata'}\nDepolama alanı dolmuş olabilir.`);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [user, refreshData]);
 
     // Cached report data by period
     const reportDataByPeriod = useMemo(() => {
@@ -414,6 +459,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         categories,
         refreshData,
         saveData,
+        restoreData,
         uploadProductList,
         uploadSalesReport,
         clearAllData,

@@ -183,6 +183,19 @@ const DataManagement: React.FC = () => {
                             Buluta Yedekle
                         </button>
                     )}
+                    {user?.type === 'persistent' && (
+                        <button
+                            onClick={() => {
+                                if (confirm('Mevcut veriler silinip buluttan indirilsin mi?')) {
+                                    restoreData();
+                                }
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                            <CloudDownload className="w-4 h-4" />
+                            Buluttan İndir
+                        </button>
+                    )}
                     <button
                         onClick={handleClearAll}
                         className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"

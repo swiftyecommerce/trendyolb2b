@@ -98,6 +98,16 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
     const isInitialLoad = useRef(true);
 
+    const refreshData = useCallback(() => {
+        setIsLoading(true);
+        try {
+            const newState = buildAnalyticsState();
+            setState(newState);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
     // Load data from server when user logs in (if persistent)
     useEffect(() => {
         const loadUserData = async () => {
@@ -281,204 +291,196 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         saveCart(cart);
     }, [cart]);
 
-    const refreshData = useCallback(() => {
-        setIsLoading(true);
-        try {
-            const newState = buildAnalyticsState();
-            setState(newState);
-        } finally {
-            setIsLoading(false);
+}, [cart]);
+
+const uploadProductList = useCallback(async (file: ArrayBuffer): Promise<number> => {
+    setIsLoading(true);
+    try {
+        const rows = parseProductExcel(file);
+        if (rows.length === 0) {
+            throw new Error('Dosyada geçerli ürün bulunamadı');
         }
-    }, []);
+        saveProductList(rows);
+        refreshData();
+        return rows.length;
+    } finally {
+        setIsLoading(false);
+    }
+}, [refreshData]);
 
-    const uploadProductList = useCallback(async (file: ArrayBuffer): Promise<number> => {
-        setIsLoading(true);
-        try {
-            const rows = parseProductExcel(file);
-            if (rows.length === 0) {
-                throw new Error('Dosyada geçerli ürün bulunamadı');
-            }
-            saveProductList(rows);
-            refreshData();
-            return rows.length;
-        } finally {
-            setIsLoading(false);
+const uploadSalesReport = useCallback(async (
+    file: ArrayBuffer,
+    period: ReportPeriod,
+    monthInfo?: { year: number; month: number }
+): Promise<number> => {
+    setIsLoading(true);
+    try {
+        const rows = parseSalesReportExcel(file, period);
+        if (rows.length === 0) {
+            throw new Error('Dosyada geçerli satış verisi bulunamadı');
         }
-    }, [refreshData]);
+        saveReport(period, rows, monthInfo);
+        refreshData();
+        return rows.length;
+    } finally {
+        setIsLoading(false);
+    }
+}, [refreshData]);
 
-    const uploadSalesReport = useCallback(async (
-        file: ArrayBuffer,
-        period: ReportPeriod,
-        monthInfo?: { year: number; month: number }
-    ): Promise<number> => {
-        setIsLoading(true);
-        try {
-            const rows = parseSalesReportExcel(file, period);
-            if (rows.length === 0) {
-                throw new Error('Dosyada geçerli satış verisi bulunamadı');
-            }
-            saveReport(period, rows, monthInfo);
-            refreshData();
-            return rows.length;
-        } finally {
-            setIsLoading(false);
+const clearAllData = useCallback(() => {
+    clearStorage();
+    setState({
+        rawRows: [],
+        byProduct: {},
+        byDate: {},
+        products: [],
+        loadedReports: []
+    });
+}, []);
+
+const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
+    setSettings(prev => {
+        const updated = { ...prev, ...newSettings };
+        saveSettings(updated);
+        return updated;
+    });
+}, []);
+
+// Cart actions
+const addToCart = useCallback((product: ProductStats, quantity: number) => {
+    setCart(prev => {
+        const existing = prev.find(item => item.modelKodu === product.modelKodu);
+        if (existing) {
+            return prev.map(item =>
+                item.modelKodu === product.modelKodu
+                    ? { ...item, quantity: item.quantity + quantity, totalCost: (item.quantity + quantity) * (item.unitCost || 0) }
+                    : item
+            );
         }
-    }, [refreshData]);
+        return [...prev, {
+            modelKodu: product.modelKodu,
+            productName: product.productName,
+            imageUrl: product.imageUrl,
+            quantity,
+            unitCost: product.avgUnitPrice,
+            totalCost: quantity * product.avgUnitPrice
+        }];
+    });
+}, []);
 
-    const clearAllData = useCallback(() => {
-        clearStorage();
-        setState({
-            rawRows: [],
-            byProduct: {},
-            byDate: {},
-            products: [],
-            loadedReports: []
-        });
-    }, []);
+const removeFromCart = useCallback((modelKodu: string) => {
+    setCart(prev => prev.filter(item => item.modelKodu !== modelKodu));
+}, []);
 
-    const updateSettings = useCallback((newSettings: Partial<AppSettings>) => {
-        setSettings(prev => {
-            const updated = { ...prev, ...newSettings };
-            saveSettings(updated);
-            return updated;
-        });
-    }, []);
+const updateCartQuantity = useCallback((modelKodu: string, quantity: number) => {
+    if (quantity <= 0) {
+        removeFromCart(modelKodu);
+        return;
+    }
+    setCart(prev => prev.map(item =>
+        item.modelKodu === modelKodu
+            ? { ...item, quantity, totalCost: quantity * (item.unitCost || 0) }
+            : item
+    ));
+}, [removeFromCart]);
 
-    // Cart actions
-    const addToCart = useCallback((product: ProductStats, quantity: number) => {
-        setCart(prev => {
-            const existing = prev.find(item => item.modelKodu === product.modelKodu);
-            if (existing) {
-                return prev.map(item =>
-                    item.modelKodu === product.modelKodu
-                        ? { ...item, quantity: item.quantity + quantity, totalCost: (item.quantity + quantity) * (item.unitCost || 0) }
-                        : item
-                );
-            }
-            return [...prev, {
-                modelKodu: product.modelKodu,
-                productName: product.productName,
-                imageUrl: product.imageUrl,
-                quantity,
-                unitCost: product.avgUnitPrice,
-                totalCost: quantity * product.avgUnitPrice
-            }];
-        });
-    }, []);
+const clearCart = useCallback(() => {
+    setCart([]);
+}, []);
 
-    const removeFromCart = useCallback((modelKodu: string) => {
-        setCart(prev => prev.filter(item => item.modelKodu !== modelKodu));
-    }, []);
+// Check if data exists for a period
+const hasDataForPeriod = useCallback((days: number): boolean => {
+    const period = daysToReportPeriod(days);
+    return !!reportDataByPeriod[period]?.data?.length;
+}, [reportDataByPeriod]);
 
-    const updateCartQuantity = useCallback((modelKodu: string, quantity: number) => {
-        if (quantity <= 0) {
-            removeFromCart(modelKodu);
-            return;
-        }
-        setCart(prev => prev.map(item =>
-            item.modelKodu === modelKodu
-                ? { ...item, quantity, totalCost: quantity * (item.unitCost || 0) }
-                : item
-        ));
-    }, [removeFromCart]);
+// Get products filtered by period and category
+const getProductsByPeriod = useCallback((days: number, category?: string): ProductStats[] => {
+    const period = daysToReportPeriod(days);
+    const reportData = reportDataByPeriod[period]?.data;
 
-    const clearCart = useCallback(() => {
-        setCart([]);
-    }, []);
-
-    // Check if data exists for a period
-    const hasDataForPeriod = useCallback((days: number): boolean => {
-        const period = daysToReportPeriod(days);
-        return !!reportDataByPeriod[period]?.data?.length;
-    }, [reportDataByPeriod]);
-
-    // Get products filtered by period and category
-    const getProductsByPeriod = useCallback((days: number, category?: string): ProductStats[] => {
-        const period = daysToReportPeriod(days);
-        const reportData = reportDataByPeriod[period]?.data;
-
-        if (!reportData || reportData.length === 0) {
-            // Fallback to all data if specific period not available
-            let products = state.products;
-            if (category) {
-                products = products.filter(p => p.category === category);
-            }
-            return products;
-        }
-
-        // Aggregate only for the selected period
-        const byProduct = aggregateByProduct(reportData, productListData);
-        let products = Object.values(byProduct).sort((a, b) => b.totalRevenue - a.totalRevenue);
-
+    if (!reportData || reportData.length === 0) {
+        // Fallback to all data if specific period not available
+        let products = state.products;
         if (category) {
             products = products.filter(p => p.category === category);
         }
-
         return products;
-    }, [reportDataByPeriod, productListData, state.products]);
+    }
 
-    // Get KPIs for a specific period
-    const getKPIsForPeriod = useCallback((days: number, category?: string) => {
-        const products = getProductsByPeriod(days, category);
+    // Aggregate only for the selected period
+    const byProduct = aggregateByProduct(reportData, productListData);
+    let products = Object.values(byProduct).sort((a, b) => b.totalRevenue - a.totalRevenue);
 
-        const totalRevenue = products.reduce((sum, p) => sum + p.totalRevenue, 0);
-        const totalQuantity = products.reduce((sum, p) => sum + p.totalQuantity, 0);
-        const totalImpressions = products.reduce((sum, p) => sum + p.totalImpressions, 0);
-        const totalAddToCart = products.reduce((sum, p) => sum + p.totalAddToCart, 0);
+    if (category) {
+        products = products.filter(p => p.category === category);
+    }
 
-        const conversionRate = totalImpressions > 0 ? (totalQuantity / totalImpressions) * 100 : 0;
-        const aov = totalQuantity > 0 ? totalRevenue / totalQuantity : 0;
+    return products;
+}, [reportDataByPeriod, productListData, state.products]);
 
-        const lowStockCount = products.filter(p =>
-            p.currentStock !== null && p.currentStock < settings.lowStockThreshold
-        ).length;
+// Get KPIs for a specific period
+const getKPIsForPeriod = useCallback((days: number, category?: string) => {
+    const products = getProductsByPeriod(days, category);
 
-        return {
-            totalRevenue,
-            totalQuantity,
-            totalImpressions,
-            totalAddToCart,
-            conversionRate,
-            aov,
-            productCount: products.length,
-            lowStockCount
-        };
-    }, [getProductsByPeriod, settings.lowStockThreshold]);
+    const totalRevenue = products.reduce((sum, p) => sum + p.totalRevenue, 0);
+    const totalQuantity = products.reduce((sum, p) => sum + p.totalQuantity, 0);
+    const totalImpressions = products.reduce((sum, p) => sum + p.totalImpressions, 0);
+    const totalAddToCart = products.reduce((sum, p) => sum + p.totalAddToCart, 0);
 
-    // Get stock recommendations for a period
-    const getStockRecommendations = useCallback((days: number, category?: string): StockRecommendation[] => {
-        const products = getProductsByPeriod(days, category);
-        return calculateStockRecommendations(products, days, settings);
-    }, [getProductsByPeriod, settings]);
+    const conversionRate = totalImpressions > 0 ? (totalQuantity / totalImpressions) * 100 : 0;
+    const aov = totalQuantity > 0 ? totalRevenue / totalQuantity : 0;
 
-    const value: AnalyticsContextType = {
-        state,
-        settings,
-        cart,
-        isLoading,
-        categories,
-        refreshData,
-        saveData,
-        restoreData,
-        uploadProductList,
-        uploadSalesReport,
-        clearAllData,
-        updateSettings,
-        addToCart,
-        removeFromCart,
-        updateCartQuantity,
-        clearCart,
-        getProductsByPeriod,
-        getStockRecommendations,
-        getKPIsForPeriod,
-        hasDataForPeriod
+    const lowStockCount = products.filter(p =>
+        p.currentStock !== null && p.currentStock < settings.lowStockThreshold
+    ).length;
+
+    return {
+        totalRevenue,
+        totalQuantity,
+        totalImpressions,
+        totalAddToCart,
+        conversionRate,
+        aov,
+        productCount: products.length,
+        lowStockCount
     };
+}, [getProductsByPeriod, settings.lowStockThreshold]);
 
-    return (
-        <AnalyticsContext.Provider value={value}>
-            {children}
-        </AnalyticsContext.Provider>
-    );
+// Get stock recommendations for a period
+const getStockRecommendations = useCallback((days: number, category?: string): StockRecommendation[] => {
+    const products = getProductsByPeriod(days, category);
+    return calculateStockRecommendations(products, days, settings);
+}, [getProductsByPeriod, settings]);
+
+const value: AnalyticsContextType = {
+    state,
+    settings,
+    cart,
+    isLoading,
+    categories,
+    refreshData,
+    saveData,
+    restoreData,
+    uploadProductList,
+    uploadSalesReport,
+    clearAllData,
+    updateSettings,
+    addToCart,
+    removeFromCart,
+    updateCartQuantity,
+    clearCart,
+    getProductsByPeriod,
+    getStockRecommendations,
+    getKPIsForPeriod,
+    hasDataForPeriod
+};
+
+return (
+    <AnalyticsContext.Provider value={value}>
+        {children}
+    </AnalyticsContext.Provider>
+);
 }
 
 export function useAnalytics(): AnalyticsContextType {

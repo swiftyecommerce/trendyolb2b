@@ -113,33 +113,36 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
             if (user?.type === 'persistent') {
                 setIsLoading(true);
                 try {
-                    const response = await fetch(`/api/data/load/${user.username}`);
-                    const result = await response.json();
+                    const { data: dbData, error } = await supabase
+                        .from('user_data')
+                        .select('data')
+                        .eq('username', user.username)
+                        .single();
 
-                    if (result.ok && result.data) {
-                        // 1. Restore localStorage first (Source of Truth)
-                        if (result.data.store) {
-                            localStorage.setItem('vizyonexcel_data', JSON.stringify(result.data.store));
+                    if (error) {
+                        // Silent error on auto-load to prefer manual restore if needed
+                        console.error('Auto-load failed:', error);
+                        return;
+                    }
+
+                    if (dbData && dbData.data) {
+                        const loadedData = dbData.data;
+
+                        // 1. Restore localStorage
+                        if (loadedData.store) {
+                            localStorage.setItem('vizyonexcel_data', JSON.stringify(loadedData.store));
                         }
 
                         // 2. Restore Cart
-                        if (result.data.cart) {
-                            setCart(result.data.cart);
+                        if (loadedData.cart) {
+                            setCart(loadedData.cart);
                         }
 
-                        // 3. Rebuild State from restored localStorage
-                        // We don't need to manually set state from result.data.state anymore
-                        // because refreshData() will read from the localStorage we just restored.
+                        // 3. Rebuild State
                         refreshData();
-
-                        console.log('Data loaded and restored from server for', user.username);
                     }
                 } catch (error) {
                     console.error('Failed to load user data:', error);
-                    // Mobile debug: Show alert on load failure
-                    if (confirm('Veriler sunucudan otomatik yüklenemedi. Tekrar denemek ister misiniz?')) {
-                        window.location.reload();
-                    }
                 } finally {
                     setIsLoading(false);
                 }

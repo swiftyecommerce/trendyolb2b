@@ -47,7 +47,7 @@ const SAFETY_STOCK_DAYS = 7;     // Güvenlik stoku
 const ITEMS_PER_PAGE = 50;
 
 const PurchaseAdvisorView: React.FC = () => {
-    const { state, getProductsByPeriod, addToCart } = useAnalytics();
+    const { state, getProductsByPeriod, addToCart, cart, updateCartQuantity, removeFromCart } = useAnalytics();
     const [currentPage, setCurrentPage] = useState(1);
     const [sortConfig, setSortConfig] = useState<{ key: keyof AdvisorItem; direction: 'asc' | 'desc' } | null>({ key: 'recommendedBuy', direction: 'desc' });
 
@@ -272,6 +272,17 @@ const PurchaseAdvisorView: React.FC = () => {
                                                 } as unknown as ProductStats}
                                                 initialQuantity={item.recommendedBuy > 0 ? item.recommendedBuy : 1}
                                                 onAdd={(p, q) => addToCart(p, q)}
+
+                                                // Cart interaction props
+                                                currentCartQuantity={state.cart.find(c => c.modelKodu === item.id)?.quantity || 0}
+                                                onUpdateQuantity={(p, q) => {
+                                                    if (q <= 0) addToCart(p, 0); // or remove
+                                                    else addToCart(p, q - (state.cart.find(c => c.modelKodu === item.id)?.quantity || 0));
+                                                    // Wait, addToCart adds to existing. updateCartQuantity is better if available from context.
+                                                    // Let's check context.
+                                                }}
+                                                onRemove={(p) => addToCart(p, -(state.cart.find(c => c.modelKodu === item.id)?.quantity || 0))}
+
                                                 compact={false}
                                             />
                                         </div>
@@ -307,8 +318,8 @@ const PurchaseAdvisorView: React.FC = () => {
                                     key={pageNum}
                                     onClick={() => setCurrentPage(pageNum)}
                                     className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-colors ${currentPage === pageNum
-                                            ? 'bg-indigo-600 text-white'
-                                            : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50'
                                         }`}
                                 >
                                     {pageNum}

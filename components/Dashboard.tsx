@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   TrendingUp, TrendingDown, DollarSign, ShoppingCart, Eye,
-  Target, BarChart3, Package, ArrowRight, Filter
+  Target, BarChart3, Package, ArrowRight, Filter, ExternalLink
 } from 'lucide-react';
 import { useAnalytics } from '../context/AnalyticsContext';
 import { formatCurrency, formatNumber, formatPercent } from '../lib/excelParser';
@@ -367,7 +367,20 @@ const TopList: React.FC<TopListProps> = ({ title, items, valueKey, formatValue, 
             <ProductImage src={item.imageUrl} name={item.productName} />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-900 truncate">{item.productName}</p>
-              <p className="text-xs text-slate-500">{item.modelKodu}</p>
+              <div className="flex items-center gap-1">
+                <p className="text-xs text-slate-500">{item.modelKodu}</p>
+                {item.productUrl && (
+                  <a
+                    href={item.productUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-500 hover:text-indigo-600"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
             </div>
             <span className="text-sm font-semibold text-slate-700 flex-shrink-0">
               {formatValue(item[valueKey])}

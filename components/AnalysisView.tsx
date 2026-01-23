@@ -2,13 +2,14 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
     BarChart3, Package, AlertTriangle, TrendingUp, TrendingDown, CheckCircle,
     Filter, ShoppingCart, DollarSign, Eye, Target, Layers,
-    Info, ChevronDown, Heart, MousePointer, X, Image, Snowflake, Calendar
+    Info, ChevronDown, Heart, MousePointer, X, Image, Snowflake, Calendar, ExternalLink
 } from 'lucide-react';
 import { useAnalytics } from '../context/AnalyticsContext';
 import { formatCurrency, formatNumber, formatPercent } from '../lib/excelParser';
 import CategoryMultiSelect from './CategoryMultiSelect';
 import ComparisonTable, { ProductComparison } from './ComparisonTable';
 import type { ProductStats, StockRecommendation, AnalysisType, AnalysisFilters } from '../types';
+import AddToCartControl from './AddToCartControl';
 
 // Extended tab types to include proof tabs
 type AnalysisTab = 'overview' | 'opportunities' | 'trends' | 'dormant' | 'stock' | 'segments';
@@ -338,6 +339,7 @@ const TrendAnalysisTab: React.FC<TrendAnalysisTabProps> = ({
                 modelKodu: p30.modelKodu,
                 productName: p30.productName,
                 imageUrl: p30.imageUrl,
+                productUrl: p30.productUrl,
                 category: p30.category,
                 oldValue: weeklyAvg,
                 newValue: current7d,
@@ -456,6 +458,7 @@ const DormantProductsTab: React.FC<DormantProductsTabProps> = ({
                     modelKodu: p30.modelKodu,
                     productName: p30.productName,
                     imageUrl: p30.imageUrl,
+                    productUrl: p30.productUrl,
                     category: p30.category,
                     oldValue: p30.totalRevenue,
                     newValue: 0,
@@ -779,7 +782,7 @@ const OpportunitiesTab: React.FC<{
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                        {opportunities.slice(0, 20).map((product, idx) => (
+                        {opportunities.map((product, idx) => (
                             <tr
                                 key={product.modelKodu}
                                 className={`border-t border-slate-100 hover:bg-indigo-50 cursor-pointer transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}
@@ -790,7 +793,20 @@ const OpportunitiesTab: React.FC<{
                                 </td>
                                 <td className="p-4 border-r border-slate-100">
                                     <p className="font-medium text-slate-900 truncate max-w-xs">{product.productName}</p>
-                                    <p className="text-xs text-slate-500">{product.modelKodu}</p>
+                                    <div className="flex items-center gap-1">
+                                        <p className="text-xs text-slate-500">{product.modelKodu}</p>
+                                        {product.productUrl && (
+                                            <a
+                                                href={product.productUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-indigo-500 hover:text-indigo-600"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <ExternalLink className="w-3 h-3" />
+                                            </a>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className="p-4 text-right text-slate-700 border-r border-slate-100">{formatNumber(product.totalImpressions)}</td>
                                 <td className="p-4 text-right text-slate-700 border-r border-slate-100">{formatNumber(product.totalAddToCart)}</td>
@@ -975,14 +991,13 @@ const StockTab: React.FC<{
                                         <span className="font-bold text-indigo-600">{formatNumber(rec.recommendedOrder)}</span>
                                     </td>
                                     <td className="p-3 text-center">
-                                        {rec.recommendedOrder > 0 && (
-                                            <button
-                                                onClick={() => handleAddToCart(rec)}
-                                                className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700"
-                                            >
-                                                <ShoppingCart className="w-3 h-3" />
-                                                Ekle
-                                            </button>
+                                        {rec.recommendedOrder > 0 && stats && (
+                                            <AddToCartControl
+                                                product={stats}
+                                                initialQuantity={rec.recommendedOrder}
+                                                onAdd={(p, q) => onAddToCart(p, q)}
+                                                compact={true}
+                                            />
                                         )}
                                     </td>
                                 </tr>

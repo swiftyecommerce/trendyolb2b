@@ -362,6 +362,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
                 modelKodu: product.modelKodu,
                 productName: product.productName,
                 imageUrl: product.imageUrl,
+                productUrl: product.productUrl,
                 quantity,
                 unitCost: product.avgUnitPrice,
                 totalCost: quantity * product.avgUnitPrice

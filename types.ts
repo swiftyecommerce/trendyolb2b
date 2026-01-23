@@ -177,6 +177,7 @@ export interface CartItem {
   modelKodu: string;
   productName: string;
   imageUrl?: string;
+  productUrl?: string;
   quantity: number;
   unitCost?: number;
   totalCost: number;

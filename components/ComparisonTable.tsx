@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
     TrendingDown, TrendingUp, Minus, Package,
     X, Eye, ShoppingCart, Target, ChevronRight,
-    Calendar, DollarSign
+    Calendar, DollarSign, ExternalLink
 } from 'lucide-react';
 import { formatCurrency, formatNumber, formatPercent } from '../lib/excelParser';
 import type { AnalysisType, ComparisonPeriod } from '../types';
@@ -15,6 +15,7 @@ export interface ProductComparison {
     modelKodu: string;
     productName: string;
     imageUrl?: string;
+    productUrl?: string;
     category?: string;
 
     // Comparison values
@@ -237,6 +238,17 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({
                                         </p>
                                         <div className="flex items-center gap-2 mt-0.5">
                                             <span className="text-xs text-slate-500">{product.modelKodu}</span>
+                                            {product.productUrl && (
+                                                <a
+                                                    href={product.productUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-indigo-500 hover:text-indigo-600"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <ExternalLink className="w-3 h-3" />
+                                                </a>
+                                            )}
                                             {product.segment && (
                                                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${product.segment === 'A' ? 'bg-emerald-100 text-emerald-700' :
                                                     product.segment === 'B' ? 'bg-blue-100 text-blue-700' :
@@ -332,7 +344,19 @@ const ProductComparisonModal: React.FC<ProductComparisonModalProps> = ({
                         <ProductImage src={product.imageUrl} name={product.productName} size="md" />
                         <div>
                             <h4 className="font-semibold text-slate-900">{product.productName}</h4>
-                            <p className="text-sm text-slate-500">{product.modelKodu}</p>
+                            <div className="flex items-center gap-2">
+                                <p className="text-sm text-slate-500">{product.modelKodu}</p>
+                                {product.productUrl && (
+                                    <a
+                                        href={product.productUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-indigo-500 hover:text-indigo-600"
+                                    >
+                                        <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                )}
+                            </div>
                             {product.category && (
                                 <p className="text-xs text-slate-400 mt-1">{product.category}</p>
                             )}

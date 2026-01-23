@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingCart, Trash2, Minus, Plus, FileDown, X, Package, FileText } from 'lucide-react';
+import { ShoppingCart, Trash2, Minus, Plus, FileDown, X, Package, FileText, ExternalLink } from 'lucide-react';
 import { useAnalytics } from '../context/AnalyticsContext';
 import { formatCurrency, formatNumber } from '../lib/excelParser';
 
@@ -328,7 +328,20 @@ const CartView: React.FC = () => {
                         )}
                         <div>
                           <p className="font-medium text-slate-900 line-clamp-1">{item.productName}</p>
-                          <p className="text-xs text-slate-500">{item.modelKodu}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-xs text-slate-500">{item.modelKodu}</p>
+                            {item.productUrl && (
+                              <a
+                                href={item.productUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-indigo-500 hover:text-indigo-600"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>

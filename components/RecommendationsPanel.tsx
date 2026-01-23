@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
     Lightbulb, Package, ImageIcon, DollarSign, Percent, Eye,
     Archive, Gift, ChevronRight, CheckCircle, AlertTriangle,
-    TrendingUp, X, Sparkles
+    TrendingUp, X, Sparkles, ExternalLink
 } from 'lucide-react';
 import { useAnalytics } from '../context/AnalyticsContext';
 import {
@@ -72,9 +72,22 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation,
                     <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">{recommendation.description}</p>
 
                     {/* Product name */}
-                    <p className="text-xs text-slate-400 mt-2 truncate">
-                        📦 {recommendation.productName}
-                    </p>
+                    <div className="flex items-center gap-1 mt-2">
+                        <p className="text-xs text-slate-400 truncate">
+                            📦 {recommendation.productName}
+                        </p>
+                        {recommendation.productUrl && (
+                            <a
+                                href={recommendation.productUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-indigo-500 hover:text-indigo-600"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <ExternalLink className="w-3 h-3" />
+                            </a>
+                        )}
+                    </div>
 
                     {/* Impact */}
                     {recommendation.estimatedImpact && (

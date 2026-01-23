@@ -6,14 +6,14 @@ import {
 import { useAnalytics } from '../context/AnalyticsContext';
 import { formatCurrency, formatNumber, formatPercent } from '../lib/excelParser';
 import type { ProductStats } from '../types';
+import AddToCartControl from './AddToCartControl';
 
 const ProductsView: React.FC = () => {
-    const { state, addToCart, getStockRecommendations, settings, categories } = useAnalytics();
+    const { state, addToCart, getStockRecommendations, settings, categories, cart } = useAnalytics();
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState<string>('');
     const [segmentFilter, setSegmentFilter] = useState<'A' | 'B' | 'C' | ''>('');
     const [sortBy, setSortBy] = useState<'revenue' | 'quantity' | 'stock'>('revenue');
-    const [addedProducts, setAddedProducts] = useState<Set<string>>(new Set());
 
     const stockRecommendations = useMemo(() => {
         const recs = getStockRecommendations(30);
@@ -62,14 +62,6 @@ const ProductsView: React.FC = () => {
     const handleAddToCart = (product: ProductStats) => {
         const qty = stockRecommendations[product.modelKodu] || 10;
         addToCart(product, qty);
-        setAddedProducts(prev => new Set(prev).add(product.modelKodu));
-        setTimeout(() => {
-            setAddedProducts(prev => {
-                const next = new Set(prev);
-                next.delete(product.modelKodu);
-                return next;
-            });
-        }, 2000);
     };
 
     const hasData = state.products.length > 0;
@@ -172,9 +164,9 @@ const ProductsView: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredProducts.slice(0, 50).map(product => {
+                            {filteredProducts.map(product => {
                                 const recommended = stockRecommendations[product.modelKodu] || 0;
-                                const isAdded = addedProducts.has(product.modelKodu);
+                                const isAdded = cart.some(c => c.modelKodu === product.modelKodu);
 
                                 return (
                                     <tr key={product.modelKodu} className="border-t border-slate-100 hover:bg-slate-50">
@@ -241,17 +233,18 @@ const ProductsView: React.FC = () => {
                                             )}
                                         </td>
                                         <td className="p-4 text-center">
-                                            <button
-                                                onClick={() => handleAddToCart(product)}
-                                                disabled={isAdded}
-                                                className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg transition-all ${isAdded
-                                                    ? 'bg-emerald-100 text-emerald-700'
-                                                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                                    }`}
-                                            >
-                                                <ShoppingCart className="w-4 h-4" />
-                                                {isAdded ? 'Eklendi' : 'Ekle'}
-                                            </button>
+                                            {isAdded ? (
+                                                <div className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-emerald-100 text-emerald-700">
+                                                    <ShoppingCart className="w-4 h-4" />
+                                                    Eklendi
+                                                </div>
+                                            ) : (
+                                                <AddToCartControl
+                                                    product={product}
+                                                    initialQuantity={recommended > 0 ? recommended : 10}
+                                                    onAdd={(p, q) => addToCart(p, q)}
+                                                />
+                                            )}
                                         </td>
                                     </tr>
                                 );
@@ -259,11 +252,9 @@ const ProductsView: React.FC = () => {
                         </tbody>
                     </table>
 
-                    {filteredProducts.length > 50 && (
-                        <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 text-center text-sm text-slate-500">
-                            İlk 50 ürün gösteriliyor ({formatNumber(filteredProducts.length)} toplam)
-                        </div>
-                    )}
+                    <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 text-center text-sm text-slate-500">
+                        Toplam {formatNumber(filteredProducts.length)} ürün listeleniyor
+                    </div>
                 </div>
             ) : (
                 <div className="bg-slate-50 rounded-2xl p-12 text-center border-2 border-dashed border-slate-200">

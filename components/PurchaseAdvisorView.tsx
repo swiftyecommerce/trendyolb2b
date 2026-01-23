@@ -2,12 +2,13 @@ import React, { useMemo, useState } from 'react';
 import {
     ShoppingBag, AlertOctagon, TrendingUp, TrendingDown,
     ChevronRight, DollarSign, Package, ShoppingCart,
-    CheckCircle, X
+    CheckCircle, X, ExternalLink
 } from 'lucide-react';
 import { NotificationCategory, ProductStats, AppTab } from '../types';
 import { useAnalytics } from '../context/AnalyticsContext';
 import { formatCurrency, formatNumber } from '../lib/excelParser';
 import { calculateProductTrends } from '../lib/notificationEngine';
+import AddToCartControl from './AddToCartControl';
 
 // ============================================
 // TYPES
@@ -17,6 +18,7 @@ interface AdvisorItem {
     id: string;
     productName: string;
     imageUrl?: string;
+    productUrl?: string;
     currentStock: number;
     dailySales: number;
     weeklySales: number;
@@ -70,6 +72,7 @@ const PurchaseAdvisorView: React.FC = () => {
                     id: product.modelKodu,
                     productName: product.productName,
                     imageUrl: product.imageUrl,
+                    productUrl: product.productUrl,
                     currentStock,
                     dailySales: 0,
                     weeklySales: stats7?.totalQuantity || 0,
@@ -92,6 +95,7 @@ const PurchaseAdvisorView: React.FC = () => {
                     id: product.modelKodu,
                     productName: product.productName,
                     imageUrl: product.imageUrl,
+                    productUrl: product.productUrl,
                     currentStock,
                     dailySales,
                     weeklySales: stats7?.totalQuantity || 0,
@@ -124,6 +128,7 @@ const PurchaseAdvisorView: React.FC = () => {
                         id: product.modelKodu,
                         productName: product.productName,
                         imageUrl: product.imageUrl,
+                        productUrl: product.productUrl,
                         currentStock,
                         dailySales,
                         weeklySales: stats7?.totalQuantity || 0,
@@ -251,8 +256,19 @@ const PurchaseAdvisorView: React.FC = () => {
                                             )}
                                             <div>
                                                 <p className="font-medium text-slate-900 line-clamp-1">{item.productName}</p>
-                                                <div className="flex items-center gap-2 mt-0.5">
+                                                <div className="flex items-center gap-1 mt-0.5">
                                                     <span className="text-xs text-slate-500">{item.id}</span>
+                                                    {item.productUrl && (
+                                                        <a
+                                                            href={item.productUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-indigo-500 hover:text-indigo-600"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            <ExternalLink className="w-3 h-3" />
+                                                        </a>
+                                                    )}
                                                     {item.priority === 'high' && (
                                                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">KRİTİK</span>
                                                     )}
@@ -292,19 +308,30 @@ const PurchaseAdvisorView: React.FC = () => {
                                                 </span>
                                             </td>
                                             <td className="py-4 px-6 text-right">
-                                                <button
-                                                    onClick={() => addToCart({
-                                                        modelKodu: item.id,
-                                                        productName: item.productName,
-                                                        imageUrl: item.imageUrl,
-                                                        avgUnitPrice: item.avgUnitPrice,
-                                                        // Partial object cast to ProductStats
-                                                    } as unknown as ProductStats, item.recommendedBuy)}
-                                                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium text-sm shadow-sm hover:shadow-md"
-                                                >
-                                                    <ShoppingCart className="w-4 h-4" />
-                                                    Sepete Ekle
-                                                </button>
+                                                <div className="flex justify-end">
+                                                    <AddToCartControl
+                                                        product={{
+                                                            modelKodu: item.id,
+                                                            productName: item.productName,
+                                                            imageUrl: item.imageUrl,
+                                                            productUrl: item.productUrl,
+                                                            avgUnitPrice: item.avgUnitPrice,
+                                                            // Dummy values to satisfy type
+                                                            totalQuantity: 0,
+                                                            totalRevenue: 0,
+                                                            currentStock: item.currentStock,
+                                                            totalImpressions: 0,
+                                                            totalAddToCart: 0,
+                                                            totalFavorites: 0,
+                                                            viewToCartRate: 0,
+                                                            cartToSaleRate: 0,
+                                                            conversionRate: 0
+                                                        } as unknown as ProductStats}
+                                                        initialQuantity={item.recommendedBuy}
+                                                        onAdd={(p, q) => addToCart(p, q)}
+                                                        compact={false}
+                                                    />
+                                                </div>
                                             </td>
                                         </>
                                     )}

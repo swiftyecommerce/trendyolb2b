@@ -274,14 +274,9 @@ const PurchaseAdvisorView: React.FC = () => {
                                                 onAdd={(p, q) => addToCart(p, q)}
 
                                                 // Cart interaction props
-                                                currentCartQuantity={state.cart.find(c => c.modelKodu === item.id)?.quantity || 0}
-                                                onUpdateQuantity={(p, q) => {
-                                                    if (q <= 0) addToCart(p, 0); // or remove
-                                                    else addToCart(p, q - (state.cart.find(c => c.modelKodu === item.id)?.quantity || 0));
-                                                    // Wait, addToCart adds to existing. updateCartQuantity is better if available from context.
-                                                    // Let's check context.
-                                                }}
-                                                onRemove={(p) => addToCart(p, -(state.cart.find(c => c.modelKodu === item.id)?.quantity || 0))}
+                                                currentCartQuantity={cart.find(c => c.modelKodu === item.id)?.quantity || 0}
+                                                onUpdateQuantity={(p, q) => updateCartQuantity(p.modelKodu, q)}
+                                                onRemove={(p) => removeFromCart(p.modelKodu)}
 
                                                 compact={false}
                                             />

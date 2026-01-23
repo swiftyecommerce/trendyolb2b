@@ -56,6 +56,7 @@ interface AnalyticsContextType {
 
     // Computed - now accepts dateRange
     getProductsByPeriod: (days: number, category?: string) => ProductStats[];
+    getHistoricalProducts: (year: number, month: number) => ProductStats[];
     getStockRecommendations: (days: number, category?: string) => StockRecommendation[];
     getKPIsForPeriod: (days: number, category?: string) => {
         totalRevenue: number;
@@ -421,6 +422,19 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         return products;
     }, [reportDataByPeriod, productListData, state.products]);
 
+    // GET HISTORICAL PRODUCTS
+    const getHistoricalProducts = useCallback((year: number, month: number): ProductStats[] => {
+        const key = `monthly_${year}_${month}`;
+        const reportData = reportDataByPeriod[key]?.data;
+
+        if (!reportData || reportData.length === 0) {
+            return [];
+        }
+
+        const byProduct = aggregateByProduct(reportData, productListData);
+        return Object.values(byProduct).sort((a, b) => b.totalRevenue - a.totalRevenue);
+    }, [reportDataByPeriod, productListData]);
+
     // Get KPIs for a specific period
     const getKPIsForPeriod = useCallback((days: number, category?: string) => {
         const products = getProductsByPeriod(days, category);
@@ -473,6 +487,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         updateCartQuantity,
         clearCart,
         getProductsByPeriod,
+        getHistoricalProducts,
         getStockRecommendations,
         getKPIsForPeriod,
         hasDataForPeriod

@@ -50,6 +50,7 @@ interface ComparisonTableProps {
     newPeriodLabel: string;  // "Ocak 2026"
     showImpact?: boolean;
     impactLabel?: string;    // "Kayıp Ciro" veya "Potansiyel Ciro"
+    valueFormat?: 'currency' | 'number' | 'percent';
     onProductClick?: (product: ProductComparison) => void;
 }
 
@@ -143,6 +144,7 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({
     newPeriodLabel,
     showImpact = true,
     impactLabel = 'Etki',
+    valueFormat = 'currency',
     onProductClick
 }) => {
     const [selectedProduct, setSelectedProduct] = useState<ProductComparison | null>(null);
@@ -152,6 +154,12 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({
     const totalNew = products.reduce((sum, p) => sum + p.newValue, 0);
     const totalChange = totalOld > 0 ? ((totalNew - totalOld) / totalOld) * 100 : 0;
     const totalImpact = products.reduce((sum, p) => sum + Math.abs(p.impactAmount), 0);
+
+    const formatValue = (val: number) => {
+        if (valueFormat === 'currency') return formatCurrency(val);
+        if (valueFormat === 'percent') return formatPercent(val);
+        return formatNumber(val);
+    };
 
     const handleProductClick = (product: ProductComparison) => {
         if (onProductClick) {
@@ -185,7 +193,7 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({
                         <div className="text-right">
                             <p className="text-slate-500">{impactLabel}</p>
                             <p className={`font-bold ${totalNew > totalOld ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {formatCurrency(totalImpact)}
+                                {formatValue(totalImpact)}
                             </p>
                         </div>
                     )}
@@ -261,10 +269,10 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({
                                     </div>
                                 </td>
                                 <td className="p-4 text-right border-r border-slate-100">
-                                    <span className="text-slate-600">{formatCurrency(product.oldValue)}</span>
+                                    <span className="text-slate-600">{formatValue(product.oldValue)}</span>
                                 </td>
                                 <td className="p-4 text-right border-r border-slate-100">
-                                    <span className="font-medium text-slate-900">{formatCurrency(product.newValue)}</span>
+                                    <span className="font-medium text-slate-900">{formatValue(product.newValue)}</span>
                                 </td>
                                 <td className="p-4 text-right border-r border-slate-100">
                                     <ChangeIndicator
@@ -278,7 +286,7 @@ const ComparisonTable: React.FC<ComparisonTableProps> = ({
                                             product.impactType === 'gain' ? 'text-emerald-600' :
                                                 'text-slate-600'
                                             }`}>
-                                            {product.impactType === 'loss' ? '-' : '+'}{formatCurrency(Math.abs(product.impactAmount))}
+                                            {product.impactType === 'loss' ? '-' : '+'}{formatValue(Math.abs(product.impactAmount))}
                                         </span>
                                     </td>
                                 )}

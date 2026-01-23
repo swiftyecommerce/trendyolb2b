@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
     BarChart3, Package, AlertTriangle, TrendingUp, TrendingDown, CheckCircle,
-    Filter, ShoppingCart, DollarSign, Eye, Target, Layers,
-    Info, ChevronDown, Heart, MousePointer, X, Image, Snowflake, Calendar, ExternalLink
+    ShoppingBag, PieChart, LayoutDashboard, Lightbulb,
+    Info, ChevronDown, Heart, MousePointer, X, Image, Snowflake, Calendar, ExternalLink,
+    Search, Filter, ShoppingCart, DollarSign, Eye, Target, Layers, ArrowUpRight, ArrowDownRight,
+    ChevronUp
 } from 'lucide-react';
 import { useAnalytics } from '../context/AnalyticsContext';
 import { formatCurrency, formatNumber, formatPercent } from '../lib/excelParser';
@@ -30,6 +32,13 @@ interface AnalysisViewProps {
 const AnalysisView: React.FC<AnalysisViewProps> = ({ initialFilter }) => {
     const { getProductsByPeriod, settings, addToCart, getStockRecommendations, hasDataForPeriod, categories } = useAnalytics();
     const [activeTab, setActiveTab] = useState<AnalysisTab>('overview');
+
+    // Updated Trend Tabs
+    const [trendTab, setTrendTab] = useState<'rising' | 'cooling' | 'yoy-growth' | 'yoy-decline'>('rising');
+
+    // Segment interactive state
+    const [expandedSegment, setExpandedSegment] = useState<'A' | 'B' | 'C' | null>(null);
+
     const [dateRange, setDateRange] = useState<DateRange>(30);
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
     const [minImpressions, setMinImpressions] = useState(settings.minImpressionsForOpportunity);
@@ -43,14 +52,17 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ initialFilter }) => {
     // Apply initial filter from notification
     useEffect(() => {
         if (initialFilter) {
-            // Map analysisType to tab
             if (initialFilter.analysisType) {
                 setActiveAnalysisType(initialFilter.analysisType);
 
                 switch (initialFilter.analysisType) {
                     case 'cooling-products':
                     case 'rising-products':
+                    case 'yoy-comparison':
                         setActiveTab('trends');
+                        if (initialFilter.analysisType === 'cooling-products') setTrendTab('cooling');
+                        if (initialFilter.analysisType === 'rising-products') setTrendTab('rising');
+                        if (initialFilter.analysisType === 'yoy-comparison') setTrendTab('yoy-decline');
                         break;
                     case 'dormant-products':
                         setActiveTab('dormant');
@@ -64,9 +76,7 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ initialFilter }) => {
                         setActiveTab('opportunities');
                         break;
                     default:
-                        if (initialFilter.tab) {
-                            setActiveTab(initialFilter.tab as AnalysisTab);
-                        }
+                        if (initialFilter.tab) setActiveTab(initialFilter.tab as AnalysisTab);
                 }
             } else if (initialFilter.tab) {
                 setActiveTab(initialFilter.tab as AnalysisTab);
@@ -74,26 +84,43 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ initialFilter }) => {
 
             if (initialFilter.segment) {
                 setSegmentFilter(initialFilter.segment);
+                setExpandedSegment(initialFilter.segment); // Auto-expand if targeted
             }
-
             if (initialFilter.relatedProducts && initialFilter.relatedProducts.length > 0) {
                 setRelatedProductsFilter(initialFilter.relatedProducts);
             }
         }
     }, [initialFilter]);
 
-    // Initialize selected categories to all when categories load
     useEffect(() => {
         if (categories.length > 0 && selectedCategories.length === 0) {
             setSelectedCategories([...categories]);
         }
     }, [categories]);
 
-    // Get products for different periods for comparison
+    // Data Loading & Processing
     const products30 = useMemo(() => getProductsByPeriod(30), [getProductsByPeriod]);
     const products7 = useMemo(() => getProductsByPeriod(7), [getProductsByPeriod]);
 
-    // Filter products by selected categories
+    const { getHistoricalProducts } = useAnalytics();
+    const prevYearProducts = useMemo(() => {
+        const now = new Date();
+        const lastYear = now.getFullYear() - 1;
+        const currentMonth = now.getMonth() + 1;
+        return getHistoricalProducts(lastYear, currentMonth);
+    }, [getHistoricalProducts]);
+
+    const prevMonthProducts = useMemo(() => {
+        const now = new Date();
+        let prevMonth = now.getMonth(); // 0-11, so prevMonth=0 is Jan
+        let prevYear = now.getFullYear();
+        if (prevMonth === 0) {
+            prevMonth = 12;
+            prevYear -= 1;
+        }
+        return getHistoricalProducts(prevYear, prevMonth);
+    }, [getHistoricalProducts]);
+
     const products = useMemo(() => {
         let filtered = getProductsByPeriod(dateRange, undefined);
         if (selectedCategories.length > 0 && selectedCategories.length < categories.length) {
@@ -102,19 +129,12 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ initialFilter }) => {
         return filtered;
     }, [getProductsByPeriod, dateRange, selectedCategories, categories.length]);
 
-    // Apply segment filter if set
     const displayProducts = useMemo(() => {
         let result = products;
-
-        if (segmentFilter) {
-            result = result.filter(p => p.segment === segmentFilter);
-        }
-
-        // Apply relatedProducts filter from notification
+        if (segmentFilter) result = result.filter(p => p.segment === segmentFilter);
         if (relatedProductsFilter && relatedProductsFilter.length > 0) {
             result = result.filter(p => relatedProductsFilter.includes(p.modelKodu));
         }
-
         return result;
     }, [products, segmentFilter, relatedProductsFilter]);
 
@@ -131,165 +151,387 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ initialFilter }) => {
         1: hasDataForPeriod(1), 7: hasDataForPeriod(7), 30: hasDataForPeriod(30), 365: hasDataForPeriod(365)
     }), [hasDataForPeriod]);
 
-    const hasData = products.length > 0;
+    // --- Comparisons Logic (Safeguarded against NaN) ---
+    // --- Comparisons Logic (Safeguarded against NaN) ---
+    const comparisons = useMemo(() => {
+        const cooling: ProductComparison[] = [];
+        const rising: ProductComparison[] = [];
+        const yoyGrowth: ProductComparison[] = [];
+        const yoyDecline: ProductComparison[] = [];
+        const segments = { A: [] as ProductComparison[], B: [] as ProductComparison[], C: [] as ProductComparison[] };
 
-    // Updated tabs with proof tabs
-    const tabs = [
-        { id: 'overview', label: 'Genel Bakış', icon: BarChart3 },
-        { id: 'trends', label: 'Trend Analizi', icon: TrendingDown, isProof: true },
-        { id: 'dormant', label: 'Durgun Ürünler', icon: Snowflake, isProof: true },
-        { id: 'opportunities', label: 'Fırsat Analizi', icon: TrendingUp },
-        { id: 'stock', label: 'Stok & Sipariş', icon: Package },
-        { id: 'segments', label: 'Segmentler', icon: Layers }
-    ];
+        // Process Trends & Segments
+        for (const p30 of products30) {
+            // Find historical previous month data
+            const prevMonthProd = prevMonthProducts.find(p => p.modelKodu === p30.modelKodu);
 
-    const clearFilters = () => {
-        setSegmentFilter(null);
-        setRelatedProductsFilter(null);
-        setActiveAnalysisType(null);
-    };
+            const currentRev = p30.totalRevenue || 0;
+            const prevRev = prevMonthProd?.totalRevenue || 0;
+            const currentQty = p30.totalQuantity || 0;
+            const prevQty = prevMonthProd?.totalQuantity || 0;
 
-    const hasActiveFilter = segmentFilter || relatedProductsFilter;
+            const changePercent = prevRev > 0 ? ((currentRev - prevRev) / prevRev) * 100 : (currentRev > 0 ? 100 : 0);
+            const impactAmount = Math.abs(currentRev - prevRev);
 
-    return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between flex-wrap gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Analiz</h1>
-                    <p className="text-sm text-slate-500 mt-1">
-                        {displayProducts.length} ürün
-                        {segmentFilter && ` • Segment ${segmentFilter}`}
-                        {relatedProductsFilter && ` • Bildirim filtrelemesi aktif`}
-                        {selectedCategories.length < categories.length && ` • ${categories.length - selectedCategories.length} kategori hariç`}
-                    </p>
-                </div>
+            // Base comparison object (MoM default)
+            const comparison: ProductComparison = {
+                modelKodu: p30.modelKodu,
+                productName: p30.productName,
+                imageUrl: p30.imageUrl,
+                productUrl: p30.productUrl,
+                category: p30.category,
+                oldValue: prevRev,
+                newValue: currentRev,
+                changePercent: isNaN(changePercent) ? 0 : changePercent,
+                changeType: changePercent > 5 ? 'increase' : changePercent < -5 ? 'decrease' : 'stable',
+                impactAmount: isNaN(impactAmount) ? 0 : impactAmount,
+                impactType: changePercent < -5 ? 'loss' : changePercent > 5 ? 'gain' : 'neutral',
+                oldQuantity: prevQty,
+                newQuantity: currentQty,
+                segment: p30.segment
+            };
 
-                {/* Filters */}
-                <div className="flex items-center gap-3 flex-wrap">
-                    {hasActiveFilter && (
-                        <button
-                            onClick={clearFilters}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-sm hover:bg-red-200"
-                        >
-                            <X className="w-4 h-4" />
-                            Filtreleri Temizle
-                        </button>
-                    )}
+            // Add to Trends
+            if (comparison.changePercent < -20 && prevRev > 1000) cooling.push(comparison);
+            else if (comparison.changePercent > 20 && currentRev > 1000) rising.push(comparison);
 
-                    {segmentFilter && !relatedProductsFilter && (
-                        <span className="flex items-center gap-1 px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-sm">
-                            Segment {segmentFilter}
-                        </span>
-                    )}
+            // Add to Segments (Always Show MoM)
+            if (p30.segment) {
+                segments[p30.segment].push(comparison);
+            }
 
-                    {relatedProductsFilter && (
-                        <span className="flex items-center gap-1 px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-sm">
-                            <AlertTriangle className="w-4 h-4" />
-                            {relatedProductsFilter.length} ürün (bildirimden)
-                        </span>
-                    )}
+            // YoY Logic
+            if (prevYearProducts && prevYearProducts.length > 0) {
+                const prev = prevYearProducts.find(p => p.modelKodu === p30.modelKodu);
+                if (prev) {
+                    const prevRevY = prev.totalRevenue || 0;
+                    const yoyChange = prevRevY > 0 ? ((currentRev - prevRevY) / prevRevY) * 100 : 0;
+                    const yoyImpact = Math.abs(currentRev - prevRevY);
 
-                    {/* Category Multi-Select */}
-                    {categories.length > 0 && (
-                        <CategoryMultiSelect
-                            categories={categories}
-                            selectedCategories={selectedCategories}
-                            onChange={setSelectedCategories}
-                        />
-                    )}
+                    const yoyComp: ProductComparison = {
+                        ...comparison,
+                        oldValue: prevRevY,
+                        newValue: currentRev,
+                        changePercent: isNaN(yoyChange) ? 0 : yoyChange,
+                        changeType: yoyChange > 0 ? 'increase' : 'decrease',
+                        impactAmount: isNaN(yoyImpact) ? 0 : yoyImpact,
+                        impactType: yoyChange > 0 ? 'gain' : 'loss',
+                        oldQuantity: prev.totalQuantity,
+                        newQuantity: currentQty
+                    };
 
-                    {/* Date Range Filter */}
-                    <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                        {([1, 7, 30, 365] as DateRange[]).map(days => (
+                    if (yoyChange > 20) yoyGrowth.push(yoyComp);
+                    else if (yoyChange < -20) yoyDecline.push(yoyComp);
+                }
+            }
+        }
+
+        return {
+            cooling: cooling.sort((a, b) => b.impactAmount - a.impactAmount),
+            rising: rising.sort((a, b) => b.impactAmount - a.impactAmount),
+            yoyGrowth: yoyGrowth.sort((a, b) => b.impactAmount - a.impactAmount),
+            yoyDecline: yoyDecline.sort((a, b) => b.impactAmount - a.impactAmount),
+            segments
+        };
+    }, [products30, prevYearProducts, prevMonthProducts, relatedProductsFilter]);
+
+
+    const renderContent = () => {
+        switch (activeTab) {
+            case 'trends':
+                return (
+                    <div className="space-y-6">
+                        {/* Trend Sub-Navigation */}
+                        <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                            <span className="text-xs font-bold text-slate-400 uppercase px-2 hidden md:block">Analiz Modu:</span>
                             <button
-                                key={days}
-                                onClick={() => setDateRange(days)}
-                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all relative ${dateRange === days
-                                    ? 'bg-white text-indigo-600 shadow-sm'
-                                    : periodAvailability[days] ? 'text-slate-600 hover:text-slate-900' : 'text-slate-400'
+                                onClick={() => setTrendTab('rising')}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${trendTab === 'rising' ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-600 hover:bg-white/50'
                                     }`}
                             >
-                                {DATE_LABELS[days]}
-                                {periodAvailability[days] && (
-                                    <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                                )}
+                                <TrendingUp className="w-4 h-4" />
+                                Yükselenler
                             </button>
-                        ))}
+                            <button
+                                onClick={() => setTrendTab('cooling')}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${trendTab === 'cooling' ? 'bg-white text-red-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-600 hover:bg-white/50'
+                                    }`}
+                            >
+                                <TrendingDown className="w-4 h-4" />
+                                Düşüştekiler
+                            </button>
+
+                            <div className="w-px h-6 bg-slate-300 mx-2 hidden md:block"></div>
+
+                            <button
+                                onClick={() => setTrendTab('yoy-growth')}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${trendTab === 'yoy-growth' ? 'bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-600 hover:bg-white/50'
+                                    }`}
+                            >
+                                <ArrowUpRight className="w-4 h-4" />
+                                Yıllık Büyüyenler
+                            </button>
+                            <button
+                                onClick={() => setTrendTab('yoy-decline')}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${trendTab === 'yoy-decline' ? 'bg-white text-purple-700 shadow-sm ring-1 ring-slate-200' : 'text-slate-600 hover:bg-white/50'
+                                    }`}
+                            >
+                                <ArrowDownRight className="w-4 h-4" />
+                                Yıllık Kaybedenler
+                            </button>
+                        </div>
+
+                        <div className="bg-white rounded-xl border border-slate-200 p-6 min-h-[400px]">
+                            {trendTab === 'rising' && (
+                                <ComparisonTable
+                                    title={`${comparisons.rising.length} Ürün Yükselişte`}
+                                    description="Geçen aya göre ciro artışı yakalayan ürünler."
+                                    analysisType="rising"
+                                    products={comparisons.rising}
+                                    oldPeriodLabel="Geçen Ay"
+                                    newPeriodLabel="Bu Ay"
+                                    showImpact={true}
+                                />
+                            )}
+                            {trendTab === 'cooling' && (
+                                <ComparisonTable
+                                    title={`${comparisons.cooling.length} Ürün Düşüşte`}
+                                    description="Geçen aya göre ciro kaybı yaşayan ürünler."
+                                    analysisType="cooling"
+                                    products={comparisons.cooling}
+                                    oldPeriodLabel="Geçen Ay"
+                                    newPeriodLabel="Bu Ay"
+                                    showImpact={true}
+                                />
+                            )}
+                            {(trendTab === 'yoy-growth' || trendTab === 'yoy-decline') && !prevYearProducts?.length ? (
+                                <YoYEmptyState />
+                            ) : (
+                                <>
+                                    {trendTab === 'yoy-growth' && (
+                                        <ComparisonTable
+                                            title="Yıllık Büyüyenler"
+                                            description="Geçen yılın aynı ayına göre büyüyenler."
+                                            analysisType="yoy-comparison"
+                                            products={comparisons.yoyGrowth}
+                                            oldPeriodLabel="Geçen Yıl"
+                                            newPeriodLabel="Bu Yıl"
+                                            showImpact={true}
+                                            impactLabel="Yıllık Artış"
+                                        />
+                                    )}
+                                    {trendTab === 'yoy-decline' && (
+                                        <ComparisonTable
+                                            title="Yıllık Kaybedenler"
+                                            description="Geçen yılın aynı ayına göre küçülenler."
+                                            analysisType="yoy-comparison"
+                                            products={comparisons.yoyDecline}
+                                            oldPeriodLabel="Geçen Yıl"
+                                            newPeriodLabel="Bu Yıl"
+                                            showImpact={true}
+                                            impactLabel="Yıllık Kayıp"
+                                        />
+                                    )}
+                                </>
+                            )}
+                        </div>
                     </div>
-                </div>
-            </div>
+                );
 
-            {/* Tabs */}
-            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto">
-                {tabs.map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => { setActiveTab(tab.id as AnalysisTab); if (!relatedProductsFilter) setSegmentFilter(null); }}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${activeTab === tab.id
-                            ? 'bg-white text-indigo-600 shadow-sm'
-                            : 'text-slate-600 hover:text-slate-900'
-                            } ${tab.isProof ? 'border-l-2 border-amber-400' : ''}`}
-                    >
-                        <tab.icon className="w-4 h-4" />
-                        {tab.label}
-                        {tab.isProof && (
-                            <span className="text-[9px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded-full font-bold">
-                                KANIT
-                            </span>
+            case 'segments':
+                return (
+                    <div className="space-y-8">
+                        {/* Segment Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <SegmentCard
+                                title="A Segmenti"
+                                description="Cironun %80'ini oluşturan en değerli ürünler"
+                                count={comparisons.segments.A.length}
+                                color="emerald"
+                                isActive={expandedSegment === 'A'}
+                                onClick={() => setExpandedSegment(expandedSegment === 'A' ? null : 'A')}
+                            />
+                            <SegmentCard
+                                title="B Segmenti"
+                                description="Cironun %15'ini oluşturan orta segment"
+                                count={comparisons.segments.B.length}
+                                color="blue"
+                                isActive={expandedSegment === 'B'}
+                                onClick={() => setExpandedSegment(expandedSegment === 'B' ? null : 'B')}
+                            />
+                            <SegmentCard
+                                title="C Segmenti"
+                                description="Cironun %5'ini oluşturan düşük performanslılar"
+                                count={comparisons.segments.C.length}
+                                color="amber"
+                                isActive={expandedSegment === 'C'}
+                                onClick={() => setExpandedSegment(expandedSegment === 'C' ? null : 'C')}
+                            />
+                        </div>
+
+                        {/* Expandable Content Area */}
+                        {expandedSegment && (
+                            <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+                                <div className={`border-t-4 rounded-xl shadow-sm bg-white overflow-hidden ${expandedSegment === 'A' ? 'border-emerald-500' :
+                                    expandedSegment === 'B' ? 'border-blue-500' : 'border-amber-500'
+                                    }`}>
+                                    <div className="p-6">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h3 className="text-xl font-bold text-slate-900">
+                                                {expandedSegment} Segmenti Detayları
+                                            </h3>
+                                            <button
+                                                onClick={() => setExpandedSegment(null)}
+                                                className="p-2 hover:bg-slate-100 rounded-full text-slate-500"
+                                            >
+                                                <X className="w-5 h-5" />
+                                            </button>
+                                        </div>
+
+                                        <ComparisonTable
+                                            title={`${expandedSegment} Segmenti Ürünleri`}
+                                            description="Bu segmentteki ürünlerin geçen aya göre performansı."
+                                            analysisType="segment"
+                                            products={comparisons.segments[expandedSegment]}
+                                            oldPeriodLabel="Geçen Ay"
+                                            newPeriodLabel="Bu Ay"
+                                            showImpact={true}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         )}
-                    </button>
-                ))}
-            </div>
+                        {!expandedSegment && (
+                            <div className="text-center p-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                <MousePointer className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                                <p>Detayları görmek için yukarıdaki kutulardan birine tıklayın.</p>
+                            </div>
+                        )}
+                    </div>
+                );
 
-            {!hasData ? (
-                <EmptyState />
-            ) : (
-                <>
-                    {activeTab === 'overview' && <OverviewTab products={displayProducts} />}
-                    {activeTab === 'trends' && (
-                        <TrendAnalysisTab
-                            products30={products30}
-                            products7={products7}
-                            relatedProducts={relatedProductsFilter}
-                            analysisType={activeAnalysisType}
-                        />
-                    )}
-                    {activeTab === 'dormant' && (
-                        <DormantProductsTab
-                            products30={products30}
-                            products7={products7}
-                            relatedProducts={relatedProductsFilter}
-                        />
-                    )}
-                    {activeTab === 'opportunities' && (
+            case 'opportunities':
+                const opportunities = comparisons.rising.filter(p => (p.oldQuantity || 0) * 2 < (p.newValue || 0)); // Dummy logic for safe filtering
+                return (
+                    <div className="space-y-6">
+                        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-8 text-white shadow-lg">
+                            <Lightbulb className="w-12 h-12 text-indigo-200 mb-4" />
+                            <h3 className="text-2xl font-bold mb-2">Fırsat Analizi</h3>
+                            <p className="text-indigo-100 max-w-2xl">
+                                Yüksek görüntülenme ve sepete ekleme oranına sahip ancak satışı düşük olan ürünler listelenir.
+                                Bu ürünlerde küçük bir fiyat veya görsel iyileştirmesi büyük ciro artışı sağlayabilir.
+                            </p>
+                        </div>
                         <OpportunitiesTab
                             products={displayProducts}
                             minImpressions={minImpressions}
-                            onMinImpressionsChange={setMinImpressions}
                             onSelectProduct={setSelectedProduct}
                         />
-                    )}
-                    {activeTab === 'stock' && (
-                        <StockTab
-                            recommendations={stockRecommendations}
-                            onAddToCart={addToCart}
-                            products={products}
-                            days={dateRange}
-                            relatedProducts={relatedProductsFilter}
-                        />
-                    )}
-                    {activeTab === 'segments' && (
-                        <SegmentsTab
-                            products={products}
-                            onSegmentClick={(seg) => setSegmentFilter(seg)}
-                            activeSegment={segmentFilter}
-                        />
-                    )}
-                </>
-            )}
+                    </div>
+                );
 
-            {/* Product Detail Modal */}
+            case 'stock':
+                return (
+                    <StockTab
+                        recommendations={stockRecommendations}
+                        onAddToCart={addToCart}
+                        products={products}
+                        days={dateRange}
+                    />
+                );
+
+            case 'dormant':
+                return (
+                    <DormantProductsTab
+                        products30={products30}
+                        products7={products7}
+                        relatedProducts={relatedProductsFilter}
+                    />
+                );
+
+            default:
+                return <OverviewTab products={displayProducts} />;
+        }
+    };
+
+    return (
+        <div className="w-full max-w-[1920px] mx-auto p-4 md:p-6 space-y-6">
+
+            {/* 1. TOP NAVIGATION BAR (Replaces Sidebar) */}
+            <header className="bg-white rounded-2xl border border-slate-200 shadow-sm p-2 flex flex-col lg:flex-row items-center justify-between gap-4 sticky top-4 z-30">
+                <div className="flex items-center gap-4 px-4 py-2">
+                    <div className="bg-slate-900 text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xl">
+                        A
+                    </div>
+                    <div>
+                        <h1 className="text-lg font-bold text-slate-900 leading-tight">Analiz Paneli</h1>
+                        <p className="text-xs text-slate-500">Trendyol B2B</p>
+                    </div>
+                </div>
+
+                <nav className="flex items-center gap-1 overflow-x-auto w-full lg:w-auto px-2 scrollbar-hide">
+                    <NavTab id="overview" label="Genel Bakış" icon={LayoutDashboard} activeTab={activeTab} onClick={setActiveTab} />
+                    <NavTab id="trends" label="Trendler" icon={TrendingUp} activeTab={activeTab} onClick={setActiveTab} />
+                    <NavTab id="segments" label="ABC Analizi" icon={PieChart} activeTab={activeTab} onClick={setActiveTab} />
+                    <NavTab id="opportunities" label="Fırsatlar" icon={Lightbulb} activeTab={activeTab} onClick={setActiveTab} />
+                    <NavTab id="stock" label="Stok" icon={Package} activeTab={activeTab} onClick={setActiveTab} />
+                    <NavTab id="dormant" label="Durgun" icon={Snowflake} activeTab={activeTab} onClick={setActiveTab} />
+                </nav>
+
+                <div className="hidden xl:flex items-center gap-3 px-4 border-l border-slate-100">
+                    <div className="text-right">
+                        <p className="text-xs text-slate-400">Toplam Ciro</p>
+                        <p className="font-bold text-slate-900">{formatCurrency(products.reduce((s, p) => s + (p.totalRevenue || 0), 0))}</p>
+                    </div>
+                </div>
+            </header>
+
+            {/* 2. MAIN CONTENT */}
+            <main>
+                {/* Header Actions (Filters) */}
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 className="text-xl font-semibold text-slate-800">
+                            {activeTab === 'overview' && 'Genel Durum'}
+                            {activeTab === 'trends' && 'Trend Analizi'}
+                            {activeTab === 'segments' && 'ABC Müşteri Segmentasyonu'}
+                            {activeTab === 'opportunities' && 'Satış Fırsatları'}
+                            {activeTab === 'stock' && 'Stok Yönetimi'}
+                            {activeTab === 'dormant' && 'Durgun Ürünler'}
+                        </h2>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        {/* Category Filter */}
+                        {categories.length > 0 && (
+                            <CategoryMultiSelect
+                                categories={categories}
+                                selectedCategories={selectedCategories}
+                                onChange={setSelectedCategories}
+                            />
+                        )}
+
+                        {/* Date Filter (Only for Overview) */}
+                        {activeTab === 'overview' && (
+                            <div className="bg-white border border-slate-200 rounded-lg p-1 flex">
+                                {([1, 7, 30, 365] as DateRange[]).map(days => (
+                                    <button
+                                        key={days}
+                                        onClick={() => setDateRange(days)}
+                                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${dateRange === days ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'
+                                            }`}
+                                    >
+                                        {DATE_LABELS[days]}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {products.length === 0 ? <EmptyState /> : renderContent()}
+            </main>
+
             {selectedProduct && (
                 <ProductDetailModal
                     product={selectedProduct}
@@ -301,895 +543,296 @@ const AnalysisView: React.FC<AnalysisViewProps> = ({ initialFilter }) => {
 };
 
 // ============================================
-// TREND ANALYSIS TAB (PROOF TAB)
+// HELPER COMPONENTS
 // ============================================
 
-interface TrendAnalysisTabProps {
-    products30: ProductStats[];
-    products7: ProductStats[];
-    relatedProducts?: string[] | null;
-    analysisType?: AnalysisType | null;
-}
-
-const TrendAnalysisTab: React.FC<TrendAnalysisTabProps> = ({
-    products30, products7, relatedProducts, analysisType
-}) => {
-    // Calculate cooling and rising products
-    const comparisons = useMemo(() => {
-        const cooling: ProductComparison[] = [];
-        const rising: ProductComparison[] = [];
-
-        for (const p30 of products30) {
-            const p7 = products7.find(p => p.modelKodu === p30.modelKodu);
-
-            // Skip if not in relatedProducts filter
-            if (relatedProducts && !relatedProducts.includes(p30.modelKodu)) continue;
-
-            // Calculate weekly average from 30-day data
-            const weeklyAvg = p30.totalRevenue / 4;
-            const current7d = p7?.totalRevenue || 0;
-
-            // Skip products with too little data
-            if (weeklyAvg < 100) continue;
-
-            const changePercent = ((current7d - weeklyAvg) / weeklyAvg) * 100;
-            const impactAmount = Math.abs(current7d - weeklyAvg);
-
-            const comparison: ProductComparison = {
-                modelKodu: p30.modelKodu,
-                productName: p30.productName,
-                imageUrl: p30.imageUrl,
-                productUrl: p30.productUrl,
-                category: p30.category,
-                oldValue: weeklyAvg,
-                newValue: current7d,
-                changePercent,
-                changeType: changePercent > 10 ? 'increase' : changePercent < -10 ? 'decrease' : 'stable',
-                impactAmount,
-                impactType: changePercent < -10 ? 'loss' : changePercent > 10 ? 'gain' : 'neutral',
-                oldQuantity: Math.round(p30.totalQuantity / 4),
-                newQuantity: p7?.totalQuantity || 0,
-                segment: p30.segment
-            };
-
-            if (changePercent < -30) {
-                cooling.push(comparison);
-            } else if (changePercent > 30) {
-                rising.push(comparison);
-            }
-        }
-
-        // Sort by impact
-        cooling.sort((a, b) => b.impactAmount - a.impactAmount);
-        rising.sort((a, b) => b.impactAmount - a.impactAmount);
-
-        return { cooling, rising };
-    }, [products30, products7, relatedProducts]);
-
-    // Determine which to show based on analysisType
-    const showCooling = !analysisType || analysisType === 'cooling-products';
-    const showRising = !analysisType || analysisType === 'rising-products';
-
-    const totalCoolingLoss = comparisons.cooling.reduce((s, p) => s + p.impactAmount, 0);
-    const totalRisingGain = comparisons.rising.reduce((s, p) => s + p.impactAmount, 0);
-
-    return (
-        <div className="space-y-8">
-            {/* Info Banner */}
-            <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-                <div className="flex items-start gap-3">
-                    <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                        <h4 className="font-semibold text-blue-900">Trend Karşılaştırması</h4>
-                        <p className="text-sm text-blue-700 mt-1">
-                            Son 7 gün performansı, son 30 günlük haftalık ortalama ile karşılaştırılıyor.
-                            %30'dan fazla sapma gösteren ürünler listelenir.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Cooling Products */}
-            {showCooling && comparisons.cooling.length > 0 && (
-                <ComparisonTable
-                    title={`${comparisons.cooling.length} Ürün İlgisini Kaybediyor`}
-                    description={`Bu ürünler son 7 günde, 30 günlük ortalamanın %30'unun altına düştü. Toplam kayıp: ${formatCurrency(totalCoolingLoss)}`}
-                    analysisType="cooling-products"
-                    products={comparisons.cooling}
-                    oldPeriodLabel="30g Haftalık Ort."
-                    newPeriodLabel="Son 7 Gün"
-                    showImpact={true}
-                    impactLabel="Kayıp Ciro"
-                />
-            )}
-
-            {/* Rising Products */}
-            {showRising && comparisons.rising.length > 0 && (
-                <ComparisonTable
-                    title={`${comparisons.rising.length} Ürün İvme Kazanıyor`}
-                    description={`Bu ürünler son 7 günde, 30 günlük ortalamanın %30 üzerine çıktı. Toplam artış: ${formatCurrency(totalRisingGain)}`}
-                    analysisType="rising-products"
-                    products={comparisons.rising}
-                    oldPeriodLabel="30g Haftalık Ort."
-                    newPeriodLabel="Son 7 Gün"
-                    showImpact={true}
-                    impactLabel="Ekstra Ciro"
-                />
-            )}
-
-            {/* No data */}
-            {comparisons.cooling.length === 0 && comparisons.rising.length === 0 && (
-                <div className="bg-slate-50 rounded-2xl p-12 text-center border-2 border-dashed border-slate-200">
-                    <CheckCircle className="w-16 h-16 mx-auto text-emerald-300 mb-4" />
-                    <h3 className="text-xl font-semibold text-slate-700 mb-2">Tüm Ürünler Stabil</h3>
-                    <p className="text-slate-500">%30'dan fazla sapma gösteren ürün bulunamadı</p>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// ============================================
-// DORMANT PRODUCTS TAB (PROOF TAB)
-// ============================================
-
-interface DormantProductsTabProps {
-    products30: ProductStats[];
-    products7: ProductStats[];
-    relatedProducts?: string[] | null;
-}
-
-const DormantProductsTab: React.FC<DormantProductsTabProps> = ({
-    products30, products7, relatedProducts
-}) => {
-    // Find products that sold in 30-day but not in 7-day
-    const dormantProducts = useMemo(() => {
-        const dormant: ProductComparison[] = [];
-
-        for (const p30 of products30) {
-            // Skip if not in relatedProducts filter
-            if (relatedProducts && !relatedProducts.includes(p30.modelKodu)) continue;
-
-            const p7 = products7.find(p => p.modelKodu === p30.modelKodu);
-
-            // Product sold in 30-day period but NOT in 7-day
-            if (p30.totalQuantity >= 3 && (!p7 || p7.totalQuantity === 0)) {
-                dormant.push({
-                    modelKodu: p30.modelKodu,
-                    productName: p30.productName,
-                    imageUrl: p30.imageUrl,
-                    productUrl: p30.productUrl,
-                    category: p30.category,
-                    oldValue: p30.totalRevenue,
-                    newValue: 0,
-                    changePercent: -100,
-                    changeType: 'decrease',
-                    impactAmount: p30.totalRevenue,
-                    impactType: 'loss',
-                    oldQuantity: p30.totalQuantity,
-                    newQuantity: 0,
-                    currentStock: p30.currentStock || undefined,
-                    segment: p30.segment
-                });
-            }
-        }
-
-        // Sort by old revenue (biggest sellers that stopped)
-        dormant.sort((a, b) => b.oldValue - a.oldValue);
-
-        return dormant;
-    }, [products30, products7, relatedProducts]);
-
-    const totalLostRevenue = dormantProducts.reduce((s, p) => s + p.impactAmount, 0);
-
-    return (
-        <div className="space-y-6">
-            {/* Info Banner */}
-            <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
-                <div className="flex items-start gap-3">
-                    <Snowflake className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div>
-                        <h4 className="font-semibold text-amber-900">Durgun Ürün Analizi</h4>
-                        <p className="text-sm text-amber-700 mt-1">
-                            Son 30 günde satış yapan ama son 7 günde hiç satış yapmayan ürünler.
-                            Bu ürünler "uyuyan" ürünlerdir ve aksiyon gerektirebilir.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            {dormantProducts.length > 0 ? (
-                <ComparisonTable
-                    title={`${dormantProducts.length} Ürün Durdu`}
-                    description={`Bu ürünler son 7 günde hiç satış yapmadı. Önceki 30 günde ${formatCurrency(totalLostRevenue)} ciro yapmışlardı.`}
-                    analysisType="dormant-products"
-                    products={dormantProducts}
-                    oldPeriodLabel="Son 30 Gün"
-                    newPeriodLabel="Son 7 Gün"
-                    showImpact={true}
-                    impactLabel="Eski Ciro"
-                />
-            ) : (
-                <div className="bg-slate-50 rounded-2xl p-12 text-center border-2 border-dashed border-slate-200">
-                    <CheckCircle className="w-16 h-16 mx-auto text-emerald-300 mb-4" />
-                    <h3 className="text-xl font-semibold text-slate-700 mb-2">Durgun Ürün Yok</h3>
-                    <p className="text-slate-500">Son 30 günde satan tüm ürünler son 7 günde de sattı</p>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// Product Image Component
-const ProductImage: React.FC<{ src?: string; name: string; size?: 'sm' | 'md' }> = ({ src, name, size = 'sm' }) => {
-    const sizeClasses = size === 'sm' ? 'w-10 h-10' : 'w-14 h-14';
-
-    if (!src) {
-        return (
-            <div className={`${sizeClasses} bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0`}>
-                <Package className="w-5 h-5 text-slate-400" />
-            </div>
-        );
-    }
-
-    return (
-        <img
-            src={src}
-            alt={name}
-            className={`${sizeClasses} object-cover rounded-lg flex-shrink-0`}
-            onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-                (e.target as HTMLImageElement).parentElement?.classList.add('bg-slate-100', 'flex', 'items-center', 'justify-center');
-            }}
-        />
-    );
-};
-
-// Product Detail Modal
-const ProductDetailModal: React.FC<{ product: ProductStats; onClose: () => void }> = ({ product, onClose }) => {
-    const getRecommendations = () => {
-        const recs = [];
-
-        // View to Cart analysis
-        if (product.totalImpressions > 100) {
-            if (product.viewToCartRate < 2) {
-                recs.push({
-                    type: 'visual',
-                    title: 'Görsel / Başlık İyileştirmesi',
-                    description: 'Görüntülenme yüksek ama sepete ekleme düşük.',
-                    details: [
-                        'Ana görsel kalitesini artırın (minimum 1000x1000px)',
-                        'Ürün başlığını SEO uyumlu hale getirin',
-                        'İlk 3 kelimede ana anahtar kelimeyi kullanın',
-                        'Beyaz arka plan tercih edin'
-                    ],
-                    metric: `Sepete Ekleme Oranı: ${formatPercent(product.viewToCartRate)}`,
-                    urgency: 'high'
-                });
-            }
-
-            // Cart to Sale analysis
-            if (product.cartToSaleRate < 20 && product.totalAddToCart > 10) {
-                recs.push({
-                    type: 'price',
-                    title: 'Fiyat / Kampanya Analizi',
-                    description: 'Sepete eklenme var ama satışa dönüşmüyor.',
-                    details: [
-                        'Rakip fiyatlarını kontrol edin',
-                        'Kargo ücreti etkisini değerlendirin',
-                        'Kampanya veya kupon ekleyin',
-                        'Stok durumunu kontrol edin'
-                    ],
-                    metric: `Satışa Dönüşüm: ${formatPercent(product.cartToSaleRate)}`,
-                    urgency: 'medium'
-                });
-            }
-        }
-
-        if (product.conversionRate < 0.5 && product.totalImpressions > 500) {
-            recs.push({
-                type: 'content',
-                title: 'İçerik Optimizasyonu',
-                description: 'Çok görüntüleniyor ama dönüşüm çok düşük.',
-                details: [
-                    'Ürün açıklamasını detaylandırın',
-                    'Özellikler bölümünü güncelleyin',
-                    'Video eklemeyi düşünün',
-                    'Müşteri yorumlarını artırın'
-                ],
-                metric: `Dönüşüm Oranı: ${formatPercent(product.conversionRate)}`,
-                urgency: 'high'
-            });
-        }
-
-        return recs;
-    };
-
-    const recommendations = getRecommendations();
-
-    return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between">
-                    <h3 className="font-bold text-lg text-slate-900">Ürün Analizi</h3>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                <div className="p-6 space-y-6">
-                    {/* Product Info */}
-                    <div className="flex gap-4">
-                        <ProductImage src={product.imageUrl} name={product.productName} size="md" />
-                        <div>
-                            <h4 className="font-semibold text-slate-900">{product.productName}</h4>
-                            <p className="text-sm text-slate-500">{product.modelKodu}</p>
-                            <p className="text-sm text-slate-400 mt-1">{product.category}</p>
-                        </div>
-                    </div>
-
-                    {/* Metrics Grid */}
-                    <div className="grid grid-cols-4 gap-3">
-                        <MetricCard label="Görüntülenme" value={formatNumber(product.totalImpressions)} icon={Eye} />
-                        <MetricCard label="Sepete Ekleme" value={formatNumber(product.totalAddToCart)} icon={ShoppingCart} />
-                        <MetricCard label="Satış" value={formatNumber(product.totalQuantity)} icon={Target} />
-                        <MetricCard label="Ciro" value={formatCurrency(product.totalRevenue)} icon={DollarSign} />
-                    </div>
-
-                    {/* Funnel Rates */}
-                    <div className="bg-slate-50 rounded-xl p-4">
-                        <h5 className="text-sm font-semibold text-slate-700 mb-3">Dönüşüm Hunisi</h5>
-                        <div className="flex items-center gap-2">
-                            <FunnelStep label="Görüntüleme → Sepet" value={product.viewToCartRate} threshold={2} />
-                            <div className="text-slate-300">→</div>
-                            <FunnelStep label="Sepet → Satış" value={product.cartToSaleRate} threshold={20} />
-                            <div className="text-slate-300">→</div>
-                            <FunnelStep label="Genel Dönüşüm" value={product.conversionRate} threshold={1} />
-                        </div>
-                    </div>
-
-                    {/* Recommendations */}
-                    {recommendations.length > 0 ? (
-                        <div className="space-y-3">
-                            <h5 className="text-sm font-semibold text-slate-700">İyileştirme Önerileri</h5>
-                            {recommendations.map((rec, idx) => (
-                                <div key={idx} className={`border rounded-xl p-4 ${rec.urgency === 'high' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'
-                                    }`}>
-                                    <div className="flex items-start justify-between mb-2">
-                                        <h6 className="font-semibold text-slate-900">{rec.title}</h6>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full ${rec.urgency === 'high' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                                            }`}>
-                                            {rec.urgency === 'high' ? 'Yüksek Öncelik' : 'Orta Öncelik'}
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-slate-600 mb-2">{rec.description}</p>
-                                    <p className="text-xs text-slate-500 mb-3">{rec.metric}</p>
-                                    <ul className="space-y-1">
-                                        {rec.details.map((detail, i) => (
-                                            <li key={i} className="text-sm text-slate-700 flex items-center gap-2">
-                                                <div className="w-1.5 h-1.5 bg-slate-400 rounded-full" />
-                                                {detail}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
-                            <CheckCircle className="w-5 h-5 text-emerald-600 inline mr-2" />
-                            <span className="text-emerald-700 font-medium">Bu ürün iyi performans gösteriyor!</span>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const MetricCard: React.FC<{ label: string; value: string; icon: React.FC<any> }> = ({ label, value, icon: Icon }) => (
-    <div className="bg-slate-50 rounded-lg p-3 text-center">
-        <Icon className="w-4 h-4 text-slate-400 mx-auto mb-1" />
-        <p className="text-xs text-slate-500">{label}</p>
-        <p className="font-semibold text-slate-900">{value}</p>
-    </div>
+const NavTab = ({ id, label, icon: Icon, activeTab, onClick }: any) => (
+    <button
+        onClick={() => onClick(id)}
+        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${activeTab === id
+            ? 'bg-slate-900 text-white shadow-md'
+            : 'text-slate-600 hover:bg-slate-50'
+            }`}
+    >
+        <Icon className="w-4 h-4" />
+        {label}
+    </button>
 );
 
-const FunnelStep: React.FC<{ label: string; value: number; threshold: number }> = ({ label, value, threshold }) => (
-    <div className="flex-1 text-center">
-        <p className="text-xs text-slate-500 mb-1">{label}</p>
-        <p className={`font-bold ${value < threshold ? 'text-red-600' : 'text-emerald-600'}`}>
-            {formatPercent(value)}
+const SegmentCard: React.FC<{ title: string; description: string; count: number; color: 'emerald' | 'blue' | 'amber'; isActive: boolean; onClick: () => void }> = ({ title, description, count, color, isActive, onClick }) => {
+    const colors = {
+        emerald: isActive ? 'bg-emerald-600 text-white ring-4 ring-emerald-100' : 'bg-white text-emerald-700 border-emerald-100 hover:border-emerald-300',
+        blue: isActive ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 'bg-white text-blue-700 border-blue-100 hover:border-blue-300',
+        amber: isActive ? 'bg-amber-600 text-white ring-4 ring-amber-100' : 'bg-white text-amber-700 border-amber-100 hover:border-amber-300'
+    };
+
+    return (
+        <div
+            onClick={onClick}
+            className={`p-6 rounded-2xl border transition-all cursor-pointer shadow-sm relative overflow-hidden ${colors[color]}`}
+        >
+            <div className="flex items-start justify-between mb-4 relative z-10">
+                <div>
+                    <h3 className={`text-lg font-bold mb-1 ${isActive ? 'text-white' : ''}`}>{title}</h3>
+                    <p className={`text-sm ${isActive ? 'text-white/80' : 'text-slate-500'}`}>{description}</p>
+                </div>
+                <div className={`p-2 rounded-lg ${isActive ? 'bg-white/20' : 'bg-slate-50'}`}>
+                    {isActive ? <ChevronUp className="w-5 h-5 text-white" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
+            </div>
+            <div className={`text-3xl font-bold relative z-10 ${isActive ? 'text-white' : 'text-slate-900'}`}>
+                {formatNumber(count)} <span className={`text-sm font-normal ${isActive ? 'text-white/70' : 'text-slate-400'}`}>Ürün</span>
+            </div>
+        </div>
+    );
+};
+
+const YoYEmptyState = () => (
+    <div className="bg-slate-50 border border-slate-200 rounded-xl p-12 text-center">
+        <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+        <h4 className="font-semibold text-slate-700">Geçmiş Veri Bulunamadı</h4>
+        <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">
+            Yıllık karşılaştırma yapabilmek için lütfen Veri Yönetimi panelinden geçen yılın aynı ayına ait (Örn: Ocak 2024) satış raporunu yükleyin.
         </p>
     </div>
 );
 
-// Empty State
-const EmptyState: React.FC = () => (
-    <div className="bg-slate-50 rounded-2xl p-12 text-center border-2 border-dashed border-slate-200">
-        <BarChart3 className="w-16 h-16 mx-auto text-slate-300 mb-4" />
-        <h3 className="text-xl font-semibold text-slate-700 mb-2">Analiz İçin Veri Gerekli</h3>
-        <p className="text-slate-500">Veri Yönetimi sayfasından Excel dosyalarınızı yükleyin</p>
-    </div>
-);
-
-// Overview Tab
 const OverviewTab: React.FC<{ products: ProductStats[] }> = ({ products }) => {
-    const topByCiro = [...products].sort((a, b) => b.totalRevenue - a.totalRevenue).slice(0, 10);
-    const topBySales = [...products].sort((a, b) => b.totalQuantity - a.totalQuantity).slice(0, 10);
-    const topByConversion = products.filter(p => p.totalImpressions > 100)
-        .sort((a, b) => b.conversionRate - a.conversionRate).slice(0, 10);
-    const lowConversion = products.filter(p => p.totalImpressions > 100)
-        .sort((a, b) => a.conversionRate - b.conversionRate).slice(0, 10);
-
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <ProductTable title="En Çok Ciro" products={topByCiro} highlightKey="totalRevenue" />
-            <ProductTable title="En Çok Satış" products={topBySales} highlightKey="totalQuantity" />
-            <ProductTable title="En Yüksek Dönüşüm" products={topByConversion} highlightKey="conversionRate" />
-            <ProductTable title="En Düşük Dönüşüm" products={lowConversion} highlightKey="conversionRate" isWarning />
-        </div>
-    );
-};
-
-// Opportunities Tab
-const OpportunitiesTab: React.FC<{
-    products: ProductStats[];
-    minImpressions: number;
-    onMinImpressionsChange: (v: number) => void;
-    onSelectProduct: (p: ProductStats) => void;
-}> = ({ products, minImpressions, onMinImpressionsChange, onSelectProduct }) => {
-    const opportunities = useMemo(() => {
-        return products
-            .filter(p => p.totalImpressions >= minImpressions && p.conversionRate < 1)
-            .sort((a, b) => b.totalImpressions - a.totalImpressions)
-            .map(p => ({
-                ...p,
-                suggestionType: p.viewToCartRate < 2 ? 'visual' : 'price',
-                suggestion: p.viewToCartRate < 2 ? 'Görsel / başlık iyileştirmesi' : 'Fiyat / kampanya analizi'
-            }));
-    }, [products, minImpressions]);
-
-    return (
-        <div className="space-y-4">
-            <div className="flex items-center gap-4 p-4 bg-amber-50 rounded-xl border border-amber-200">
-                <Info className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                <p className="text-sm text-amber-800 flex-1">
-                    Yüksek görüntülenme ama düşük dönüşüm. <strong>Detaylar için satıra tıklayın.</strong>
-                </p>
-                <div className="flex items-center gap-2">
-                    <span className="text-sm text-amber-700">Min. görüntülenme:</span>
-                    <input
-                        type="number"
-                        value={minImpressions}
-                        onChange={(e) => onMinImpressionsChange(Number(e.target.value))}
-                        className="w-24 px-2 py-1 border border-amber-300 rounded-lg text-sm"
-                    />
-                </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
-                <table className="w-full border-collapse">
-                    <thead className="bg-slate-50 border-b border-slate-300">
-                        <tr>
-                            <th className="text-left p-4 text-sm font-semibold text-slate-600 w-16 border-r border-slate-200">Görsel</th>
-                            <th className="text-left p-4 text-sm font-semibold text-slate-600 border-r border-slate-200">Ürün</th>
-                            <th className="text-right p-4 text-sm font-semibold text-slate-600 border-r border-slate-200">Görüntülenme</th>
-                            <th className="text-right p-4 text-sm font-semibold text-slate-600 border-r border-slate-200">Sepete Ekleme</th>
-                            <th className="text-right p-4 text-sm font-semibold text-slate-600 border-r border-slate-200">Satış</th>
-                            <th className="text-right p-4 text-sm font-semibold text-slate-600 border-r border-slate-200">Dönüşüm</th>
-                            <th className="text-left p-4 text-sm font-semibold text-slate-600">Öneri</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                        {opportunities.map((product, idx) => (
-                            <tr
-                                key={product.modelKodu}
-                                className={`border-t border-slate-100 hover:bg-indigo-50 cursor-pointer transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}
-                                onClick={() => onSelectProduct(product)}
-                            >
-                                <td className="p-4 border-r border-slate-100">
-                                    <ProductImage src={product.imageUrl} name={product.productName} />
-                                </td>
-                                <td className="p-4 border-r border-slate-100">
-                                    <p className="font-medium text-slate-900 truncate max-w-xs">{product.productName}</p>
-                                    <div className="flex items-center gap-1">
-                                        <p className="text-xs text-slate-500">{product.modelKodu}</p>
-                                        {product.productUrl && (
-                                            <a
-                                                href={product.productUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-indigo-500 hover:text-indigo-600"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <ExternalLink className="w-3 h-3" />
-                                            </a>
-                                        )}
-                                    </div>
-                                </td>
-                                <td className="p-4 text-right text-slate-700 border-r border-slate-100">{formatNumber(product.totalImpressions)}</td>
-                                <td className="p-4 text-right text-slate-700 border-r border-slate-100">{formatNumber(product.totalAddToCart)}</td>
-                                <td className="p-4 text-right text-slate-700 border-r border-slate-100">{formatNumber(product.totalQuantity)}</td>
-                                <td className="p-4 text-right border-r border-slate-100">
-                                    <span className="text-red-600 font-medium">{formatPercent(product.conversionRate)}</span>
-                                </td>
-                                <td className="p-4">
-                                    <span className={`text-xs px-2 py-1 rounded-full ${product.suggestionType === 'visual'
-                                        ? 'bg-purple-100 text-purple-700'
-                                        : 'bg-amber-100 text-amber-700'
-                                        }`}>
-                                        {product.suggestion}
-                                    </span>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {opportunities.length === 0 && (
-                    <p className="p-8 text-center text-slate-400">Bu kriterlere uyan ürün bulunamadı</p>
-                )}
-            </div>
-        </div>
-    );
-};
-
-// Profitability Tab
-const ProfitabilityTab: React.FC<{ products: ProductStats[] }> = ({ products }) => {
-    const sortedByRevenue = [...products].sort((a, b) => b.totalRevenue - a.totalRevenue);
-
-    return (
-        <div className="space-y-4">
-            <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
-                <Info className="w-5 h-5 text-blue-600 inline mr-2" />
-                <span className="text-sm text-blue-800">
-                    Maliyet verisi Excel'de mevcut değilse, ciro bazlı sıralama gösterilir.
-                </span>
-            </div>
-            <ProductTable title="Ciro Sıralaması" products={sortedByRevenue.slice(0, 20)} highlightKey="totalRevenue" />
-        </div>
-    );
-};
-
-// Stock Tab with engagement metrics
-const StockTab: React.FC<{
-    recommendations: StockRecommendation[];
-    onAddToCart: (product: ProductStats, qty: number) => void;
-    products: ProductStats[];
-    days: number;
-    relatedProducts?: string[] | null;
-}> = ({ recommendations, onAddToCart, products, days, relatedProducts }) => {
-    // Filter recommendations if relatedProducts is set
-    const filteredRecs = useMemo(() => {
-        if (relatedProducts && relatedProducts.length > 0) {
-            return recommendations.filter(r => relatedProducts.includes(r.modelKodu));
-        }
-        return recommendations;
-    }, [recommendations, relatedProducts]);
-
-    const criticalCount = filteredRecs.filter(r => r.urgency === 'critical').length;
-    const warningCount = filteredRecs.filter(r => r.urgency === 'warning').length;
-
-    const handleAddToCart = (rec: StockRecommendation) => {
-        const product = products.find(p => p.modelKodu === rec.modelKodu);
-        if (product && rec.recommendedOrder > 0) {
-            onAddToCart(product, rec.recommendedOrder);
-        }
-    };
-
-    // Get product stats for engagement metrics
-    const getProductStats = (modelKodu: string) => products.find(p => p.modelKodu === modelKodu);
-
-    return (
-        <div className="space-y-4">
-            {/* Status Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-red-50 rounded-xl p-4 border border-red-200">
-                    <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-5 h-5 text-red-600" />
-                        <span className="font-semibold text-red-700">Kritik Stok</span>
-                    </div>
-                    <p className="text-3xl font-bold text-red-700 mt-2">{criticalCount}</p>
-                    <p className="text-sm text-red-600">5 gün içinde tükenecek</p>
-                </div>
-                <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
-                    <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-5 h-5 text-amber-600" />
-                        <span className="font-semibold text-amber-700">Uyarı</span>
-                    </div>
-                    <p className="text-3xl font-bold text-amber-700 mt-2">{warningCount}</p>
-                    <p className="text-sm text-amber-600">10 gün içinde tükenecek</p>
-                </div>
-                <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
-                    <div className="flex items-center gap-2">
-                        <CheckCircle className="w-5 h-5 text-emerald-600" />
-                        <span className="font-semibold text-emerald-700">Yeterli Stok</span>
-                    </div>
-                    <p className="text-3xl font-bold text-emerald-700 mt-2">
-                        {recommendations.filter(r => r.urgency === 'ok').length}
-                    </p>
-                    <p className="text-sm text-emerald-600">10 günden fazla</p>
-                </div>
-            </div>
-
-            {/* Recommendations Table with engagement metrics */}
-            <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
-                <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
-                    <h3 className="font-semibold text-slate-700">Sipariş Önerileri ({days} günlük veriye göre)</h3>
-                </div>
-                <table className="w-full min-w-[1000px] border-collapse">
-                    <thead className="bg-slate-50 border-b border-slate-300">
-                        <tr>
-                            <th className="text-left p-3 text-xs font-semibold text-slate-500 w-12 border-r border-slate-200">Görsel</th>
-                            <th className="text-left p-3 text-xs font-semibold text-slate-500 border-r border-slate-200">Ürün</th>
-                            <th className="text-right p-3 text-xs font-semibold text-slate-500 border-r border-slate-200">Stok</th>
-                            <th className="text-right p-3 text-xs font-semibold text-slate-500 border-r border-slate-200">Günlük Satış</th>
-                            <th className="text-right p-3 text-xs font-semibold text-slate-500 border-r border-slate-200">Kalan Gün</th>
-                            <th className="text-right p-3 text-xs font-semibold text-slate-500 bg-blue-50 border-r border-blue-100">
-                                <Eye className="w-3 h-3 inline mr-1" />Görüntülenme
-                            </th>
-                            <th className="text-right p-3 text-xs font-semibold text-slate-500 bg-blue-50 border-r border-blue-100">
-                                <Heart className="w-3 h-3 inline mr-1" />Favori
-                            </th>
-                            <th className="text-right p-3 text-xs font-semibold text-slate-500 bg-blue-50 border-r border-blue-100">
-                                <ShoppingCart className="w-3 h-3 inline mr-1" />Sepet
-                            </th>
-                            <th className="text-right p-3 text-xs font-semibold text-slate-500 bg-blue-50 border-r border-blue-100">
-                                <Target className="w-3 h-3 inline mr-1" />Satış
-                            </th>
-                            <th className="text-right p-3 text-xs font-semibold text-slate-500 border-r border-slate-200">Önerilen</th>
-                            <th className="text-center p-3 text-xs font-semibold text-slate-500 w-24">Aksiyon</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                        {filteredRecs.filter(r => r.urgency !== 'ok').slice(0, 30).map((rec, idx) => {
-                            const stats = getProductStats(rec.modelKodu);
-                            return (
-                                <tr
-                                    key={rec.modelKodu}
-                                    className={`border-t border-slate-100 ${rec.urgency === 'critical' ? 'bg-red-50' :
-                                        rec.urgency === 'warning' ? 'bg-amber-50' :
-                                            idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'
-                                        }`}
-                                >
-                                    <td className="p-3 border-r border-slate-200/50">
-                                        <ProductImage src={rec.imageUrl} name={rec.productName} />
-                                    </td>
-                                    <td className="p-3 border-r border-slate-200/50">
-                                        <p className="font-medium text-slate-900 truncate max-w-[200px]">{rec.productName}</p>
-                                        <p className="text-xs text-slate-500">{rec.modelKodu}</p>
-                                    </td>
-                                    <td className="p-3 text-right border-r border-slate-200/50">
-                                        <span className={`font-medium ${rec.currentStock === null ? 'text-slate-400' :
-                                            rec.currentStock < 10 ? 'text-red-600' : 'text-slate-700'
-                                            }`}>
-                                            {rec.currentStock !== null ? formatNumber(rec.currentStock) : '—'}
-                                        </span>
-                                    </td>
-                                    <td className="p-3 text-right text-slate-700 border-r border-slate-200/50">{rec.dailySales.toFixed(1)}</td>
-                                    <td className="p-3 text-right border-r border-slate-200/50">
-                                        <span className={`font-medium ${rec.daysUntilEmpty === null ? 'text-slate-400' :
-                                            rec.daysUntilEmpty <= 5 ? 'text-red-600' :
-                                                rec.daysUntilEmpty <= 10 ? 'text-amber-600' : 'text-emerald-600'
-                                            }`}>
-                                            {rec.daysUntilEmpty !== null ? `${rec.daysUntilEmpty.toFixed(0)}g` : '—'}
-                                        </span>
-                                    </td>
-                                    <td className="p-3 text-right text-blue-600 bg-blue-50/50 border-r border-blue-100">
-                                        {stats ? formatNumber(stats.totalImpressions) : '—'}
-                                    </td>
-                                    <td className="p-3 text-right text-blue-600 bg-blue-50/50 border-r border-blue-100">
-                                        {stats ? formatNumber(stats.totalFavorites) : '—'}
-                                    </td>
-                                    <td className="p-3 text-right text-blue-600 bg-blue-50/50 border-r border-blue-100">
-                                        {stats ? formatNumber(stats.totalAddToCart) : '—'}
-                                    </td>
-                                    <td className="p-3 text-right text-blue-600 bg-blue-50/50 border-r border-blue-100">
-                                        {stats ? formatNumber(stats.totalQuantity) : '—'}
-                                    </td>
-                                    <td className="p-3 text-right border-r border-slate-200/50">
-                                        <span className="font-bold text-indigo-600">{formatNumber(rec.recommendedOrder)}</span>
-                                    </td>
-                                    <td className="p-3 text-center">
-                                        {rec.recommendedOrder > 0 && stats && (
-                                            <AddToCartControl
-                                                product={stats}
-                                                initialQuantity={rec.recommendedOrder}
-                                                onAdd={(p, q) => onAddToCart(p, q)}
-                                                compact={true}
-                                            />
-                                        )}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-                {filteredRecs.filter(r => r.urgency !== 'ok').length === 0 && (
-                    <p className="p-8 text-center text-slate-400">Stok uyarısı yok</p>
-                )}
-            </div>
-        </div>
-    );
-};
-
-// Segments Tab with clickable cards
-const SegmentsTab: React.FC<{
-    products: ProductStats[];
-    onSegmentClick: (seg: 'A' | 'B' | 'C') => void;
-    activeSegment: 'A' | 'B' | 'C' | null;
-}> = ({ products, onSegmentClick, activeSegment }) => {
-    const segments = useMemo(() => {
-        const a = products.filter(p => p.segment === 'A');
-        const b = products.filter(p => p.segment === 'B');
-        const c = products.filter(p => p.segment === 'C');
-
-        const totalRevenue = products.reduce((s, p) => s + p.totalRevenue, 0);
-
-        return {
-            A: {
-                products: a,
-                count: a.length,
-                revenue: a.reduce((s, p) => s + p.totalRevenue, 0),
-                revenuePercent: totalRevenue > 0 ? (a.reduce((s, p) => s + p.totalRevenue, 0) / totalRevenue) * 100 : 0,
-                avgRevenue: a.length > 0 ? a.reduce((s, p) => s + p.totalRevenue, 0) / a.length : 0,
-                description: 'En değerli ürünler. Satışların büyük kısmını oluşturuyor.',
-                actions: ['Stok takibine öncelik verin', 'Premium pazarlama yapın', 'Fiyat optimizasyonu uygulayın']
-            },
-            B: {
-                products: b,
-                count: b.length,
-                revenue: b.reduce((s, p) => s + p.totalRevenue, 0),
-                revenuePercent: totalRevenue > 0 ? (b.reduce((s, p) => s + p.totalRevenue, 0) / totalRevenue) * 100 : 0,
-                avgRevenue: b.length > 0 ? b.reduce((s, p) => s + p.totalRevenue, 0) / b.length : 0,
-                description: 'Orta değerli ürünler. Potansiyel A segmenti adayları.',
-                actions: ['Görünürlüğü artırın', 'Cross-sell fırsatları', 'Kampanya önceliği verin']
-            },
-            C: {
-                products: c,
-                count: c.length,
-                revenue: c.reduce((s, p) => s + p.totalRevenue, 0),
-                revenuePercent: totalRevenue > 0 ? (c.reduce((s, p) => s + p.totalRevenue, 0) / totalRevenue) * 100 : 0,
-                avgRevenue: c.length > 0 ? c.reduce((s, p) => s + p.totalRevenue, 0) / c.length : 0,
-                description: 'Düşük cirolu ürünler. Değerlendirme gerekebilir.',
-                actions: ['Maliyetleri gözden geçirin', 'Katalogdan çıkarma değerlendirin', 'Paket satış deneyin']
-            }
-        };
-    }, [products]);
+    const totalRev = products.reduce((sum, p) => sum + (p.totalRevenue || 0), 0);
+    const totalQty = products.reduce((sum, p) => sum + (p.totalQuantity || 0), 0);
+    const avgPrice = totalQty > 0 ? totalRev / totalQty : 0;
 
     return (
         <div className="space-y-6">
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <h3 className="font-semibold text-slate-700 mb-2">ABC Segmentasyonu</h3>
-                <p className="text-sm text-slate-500">
-                    <strong>A:</strong> Cironun %80'i • <strong>B:</strong> Sonraki %15 • <strong>C:</strong> Son %5
-                    <br /><span className="text-indigo-600">Detaylı listeyi görmek için kartlara tıklayın.</span>
-                </p>
-            </div>
-
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {(['A', 'B', 'C'] as const).map(seg => (
-                    <button
-                        key={seg}
-                        onClick={() => onSegmentClick(seg)}
-                        className={`rounded-xl p-5 border text-left transition-all hover:shadow-lg ${seg === 'A' ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400' :
-                            seg === 'B' ? 'bg-blue-50 border-blue-200 hover:border-blue-400' :
-                                'bg-slate-50 border-slate-200 hover:border-slate-400'
-                            } ${activeSegment === seg ? 'ring-2 ring-indigo-500' : ''}`}
-                    >
-                        <div className="flex items-center justify-between mb-3">
-                            <span className={`text-2xl font-bold ${seg === 'A' ? 'text-emerald-700' : seg === 'B' ? 'text-blue-700' : 'text-slate-700'
-                                }`}>
-                                Segment {seg}
-                            </span>
-                            <span className={`text-3xl font-black ${seg === 'A' ? 'text-emerald-600' : seg === 'B' ? 'text-blue-600' : 'text-slate-600'
-                                }`}>
-                                {formatPercent(segments[seg].revenuePercent)}
-                            </span>
-                        </div>
-
-                        <p className="text-sm text-slate-600 mb-4">{segments[seg].description}</p>
-
-                        <div className="space-y-2 mb-4">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">Ürün Sayısı</span>
-                                <span className="font-semibold">{formatNumber(segments[seg].count)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">Toplam Ciro</span>
-                                <span className="font-semibold">{formatCurrency(segments[seg].revenue)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">Ort. Ürün Cirosu</span>
-                                <span className="font-semibold">{formatCurrency(segments[seg].avgRevenue)}</span>
-                            </div>
-                        </div>
-
-                        <div className={`text-xs space-y-1 ${seg === 'A' ? 'text-emerald-700' : seg === 'B' ? 'text-blue-700' : 'text-slate-600'
-                            }`}>
-                            <p className="font-semibold">Önerilen Aksiyonlar:</p>
-                            {segments[seg].actions.map((action, i) => (
-                                <p key={i} className="flex items-center gap-1">
-                                    <span>•</span> {action}
-                                </p>
-                            ))}
-                        </div>
-                    </button>
-                ))}
+                <MetricCard label="Toplam Ciro" value={formatCurrency(totalRev)} icon={DollarSign} change="bu dönem" />
+                <MetricCard label="Toplam Satış" value={formatNumber(totalQty) + " Adet"} icon={ShoppingBag} />
+                <MetricCard label="Ort. Sepet Tutarı" value={formatCurrency(avgPrice)} icon={Target} />
             </div>
 
-            {/* Segment Products List (when segment selected) */}
-            {activeSegment && (
-                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                        <h3 className="font-semibold text-slate-700">
-                            Segment {activeSegment} Ürünleri ({segments[activeSegment].count} ürün)
-                        </h3>
-                    </div>
-                    <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
-                        {segments[activeSegment].products.slice(0, 20).map((product, idx) => (
-                            <div key={product.modelKodu} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
-                                <span className="text-sm text-slate-400 w-6">{idx + 1}</span>
-                                <ProductImage src={product.imageUrl} name={product.productName} />
+            <div className="bg-white rounded-xl p-6 border border-slate-200">
+                <h3 className="font-bold text-slate-800 mb-4">En İyi Performans Gösterenler</h3>
+                <div className="space-y-4">
+                    {products
+                        .sort((a, b) => b.totalRevenue - a.totalRevenue)
+                        .slice(0, 5)
+                        .map((p, i) => (
+                            <div key={i} className="flex items-center gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 text-sm">{i + 1}</div>
+                                <ProductImage src={p.imageUrl} name={p.productName} size="sm" />
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-slate-900 truncate">{product.productName}</p>
-                                    <p className="text-xs text-slate-500">{product.modelKodu}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-semibold text-slate-900">{formatCurrency(product.totalRevenue)}</p>
-                                    <p className="text-xs text-slate-500">{formatNumber(product.totalQuantity)} adet</p>
+                                    <p className="font-medium text-slate-900 truncate" title={p.productName}>{p.productName}</p>
+                                    <p className="text-sm text-slate-500">{formatCurrency(p.totalRevenue)}</p>
                                 </div>
                             </div>
                         ))}
-                    </div>
                 </div>
-            )}
+            </div>
         </div>
     );
 };
 
-// Reusable Product Table
-const ProductTable: React.FC<{
-    title: string;
-    products: ProductStats[];
-    highlightKey: 'totalRevenue' | 'totalQuantity' | 'conversionRate';
-    isWarning?: boolean;
-}> = ({ title, products, highlightKey, isWarning }) => {
-    const formatHighlight = (product: ProductStats) => {
-        switch (highlightKey) {
-            case 'totalRevenue': return formatCurrency(product.totalRevenue);
-            case 'totalQuantity': return `${formatNumber(product.totalQuantity)} adet`;
-            case 'conversionRate': return formatPercent(product.conversionRate);
+const MetricCard: React.FC<{ label: string; value: string; icon: any; change?: string }> = ({ label, value, icon: Icon, change }) => (
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-slate-100 rounded-lg text-slate-600"><Icon className="w-5 h-5" /></div>
+            <span className="text-slate-500 font-medium">{label}</span>
+        </div>
+        <div className="text-2xl font-bold text-slate-900">{value}</div>
+        {change && <div className="text-xs text-slate-400 mt-1">{change}</div>}
+    </div>
+);
+
+const EmptyState = () => (
+    <div className="flex flex-col items-center justify-center py-20 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+        <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mb-4"><BarChart3 className="w-8 h-8 text-slate-400" /></div>
+        <h3 className="text-xl font-bold text-slate-700">Veri Bulunamadı</h3>
+    </div>
+);
+
+const DormantProductsTab: React.FC<{ products30: ProductStats[], products7: ProductStats[], relatedProducts?: string[] | null }> = ({ products30, products7, relatedProducts }) => {
+    const dormantProducts = useMemo(() => {
+        const dormant: ProductComparison[] = [];
+        for (const p30 of products30) {
+            if (relatedProducts && !relatedProducts.includes(p30.modelKodu)) continue;
+            const p7 = products7.find(p => p.modelKodu === p30.modelKodu);
+            if ((p30.totalQuantity || 0) >= 3 && (!p7 || (p7.totalQuantity || 0) === 0)) {
+                dormant.push({
+                    modelKodu: p30.modelKodu, productName: p30.productName, imageUrl: p30.imageUrl, productUrl: p30.productUrl, category: p30.category, oldValue: (p30.totalRevenue || 0), newValue: 0, changePercent: -100, changeType: 'decrease', impactAmount: (p30.totalRevenue || 0), impactType: 'loss', oldQuantity: (p30.totalQuantity || 0), newQuantity: 0, segment: p30.segment
+                });
+            }
         }
-    };
+        return dormant.sort((a, b) => b.oldValue - a.oldValue);
+    }, [products30, products7, relatedProducts]);
 
     return (
-        <div className={`rounded-xl border overflow-hidden ${isWarning ? 'border-amber-200' : 'border-slate-200'}`}>
-            <div className={`px-4 py-3 border-b ${isWarning ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
-                <h3 className={`font-semibold ${isWarning ? 'text-amber-700' : 'text-slate-700'}`}>{title}</h3>
+        <div className="space-y-6">
+            <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 font-medium">Durgun Ürün Analizi</div>
+            {dormantProducts.length > 0 ? (
+                <ComparisonTable title="Durgun Ürünler" description="Son 30 günde satan ama son 7 günde duranlar." products={dormantProducts} analysisType="dormant-products" showImpact={true} oldPeriodLabel="Son 30 Gün" newPeriodLabel="Son 7 Gün" />
+            ) : <EmptyState />}
+        </div>
+    );
+};
+
+const OpportunitiesTab: React.FC<any> = ({ products, onSelectProduct }) => {
+    // Filter: High AddToCart but Low Sales
+    const rawOpportunities = products.filter((p: ProductStats) => (p.totalAddToCart || 0) > (p.totalQuantity || 0) * 3);
+
+    // Map to ProductComparison to avoid NaN
+    const opportunities: ProductComparison[] = rawOpportunities.map((p: ProductStats) => {
+        const potentialQty = Math.round((p.totalAddToCart || 0) * 0.25); // Assume 25% conversion potential
+        const currentQty = p.totalQuantity || 0;
+        const potentialRev = potentialQty * (p.avgUnitPrice || 0);
+        const currentRev = p.totalRevenue || 0;
+        const missedRev = Math.max(0, potentialRev - currentRev);
+
+        return {
+            modelKodu: p.modelKodu,
+            productName: p.productName,
+            imageUrl: p.imageUrl,
+            productUrl: p.productUrl,
+            category: p.category,
+            oldValue: potentialRev,     // Shown as "Potansiyel" oldPeriodLabel
+            newValue: currentRev,       // Shown as "Mevcut" newPeriodLabel
+            changePercent: potentialRev > 0 ? ((currentRev - potentialRev) / potentialRev) * 100 : 0,
+            changeType: 'stable',
+            impactAmount: missedRev,
+            impactType: 'loss', // Missed opportunity is a "loss"
+            oldQuantity: potentialQty,
+            newQuantity: currentQty,
+            segment: p.segment
+        };
+    });
+
+    return (
+        <div className="space-y-4">
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 flex items-start gap-3">
+                <Info className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
+                <div className="text-indigo-900 text-sm">
+                    <p className="font-semibold mb-1">Hesaplama Mantığı:</p>
+                    <p>
+                        <strong>Potansiyel Ciro:</strong> (Sepete Ekleme Sayısı × %25 Tahmini Dönüşüm) × Ortalama Satış Fiyatı
+                        <br />
+                        Bu hesaplama, ürünün sepete eklenme potansiyelinin %25'inin satışa dönüşeceği varsayımıyla yapılır.
+                    </p>
+                </div>
             </div>
-            <div className="bg-white divide-y divide-slate-100 max-h-80 overflow-y-auto">
-                {products.map((product, idx) => (
-                    <div key={product.modelKodu} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${idx === 0 ? 'bg-amber-100 text-amber-700' :
-                            idx === 1 ? 'bg-slate-200 text-slate-600' :
-                                idx === 2 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'
-                            }`}>
-                            {idx + 1}
-                        </span>
-                        <ProductImage src={product.imageUrl} name={product.productName} />
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-slate-900 truncate">{product.productName}</p>
-                            <p className="text-xs text-slate-500">{product.modelKodu}</p>
-                        </div>
-                        <span className={`text-sm font-semibold flex-shrink-0 ${isWarning ? 'text-amber-600' : 'text-slate-700'}`}>
-                            {formatHighlight(product)}
-                        </span>
+            <ComparisonTable
+                title="Fırsat Ürünleri"
+                description="İlgi gören ancak siparişe dönüşmeyen ürünler."
+                products={opportunities}
+                analysisType="opportunity"
+                showImpact={true}
+                oldPeriodLabel="Potansiyel"
+                newPeriodLabel="Mevcut"
+                impactLabel="Kaçan Ciro"
+            />
+        </div>
+    );
+};
+
+const StockTab: React.FC<any> = ({ recommendations, products, days }) => {
+    const critical = recommendations.filter((r: any) => r.urgency === 'critical');
+
+    // Map to ProductComparison
+    const mappedStock: ProductComparison[] = critical.map((rec: any) => {
+        const p = products.find((prod: ProductStats) => prod.modelKodu === rec.modelKodu);
+        if (!p) return null;
+
+        const weeklySales = (p.totalQuantity || 0) / (days / 7);
+
+        return {
+            modelKodu: p.modelKodu,
+            productName: p.productName,
+            imageUrl: p.imageUrl,
+            productUrl: p.productUrl,
+            category: p.category,
+            oldValue: p.currentStock || 0,   // "Stok" oldPeriodLabel
+            newValue: weeklySales,           // "Satış Hızı" newPeriodLabel
+            changePercent: 0,
+            changeType: 'stable',
+            impactAmount: 0,
+            impactType: 'neutral',
+            currentStock: p.currentStock,
+            oldQuantity: p.currentStock,
+            newQuantity: Math.round(weeklySales)
+        };
+    }).filter(Boolean) as ProductComparison[];
+
+    return <ComparisonTable
+        title="Kritik Stok"
+        description="Tükenmek üzere olan ürünler."
+        products={mappedStock}
+        analysisType="stock-critical"
+        showImpact={false}
+        oldPeriodLabel="Mevcut Stok"
+        newPeriodLabel="Haftalık Satış Hızı"
+        valueFormat="number"
+    />;
+};
+
+const ProductImage: React.FC<{ src?: string; name: string; size?: 'sm' | 'md' }> = ({ src, name, size = 'sm' }) => {
+    const sizeClasses = size === 'sm' ? 'w-10 h-10' : 'w-14 h-14';
+    if (!src) return <div className={`${sizeClasses} bg-slate-100 rounded-lg flex items-center justify-center`}><Package className="w-5 h-5 text-slate-400" /></div>;
+    return <img src={src} alt={name} className={`${sizeClasses} object-cover rounded-lg`} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />;
+};
+
+const ProductDetailModal: React.FC<{ product: ProductStats; onClose: () => void }> = ({ product, onClose }) => {
+    const [aiAnalysis, setAiAnalysis] = useState<import('../services/aiService').AIAnalysisResult | null>(null);
+    const [isLoadingAI, setIsLoadingAI] = useState(false);
+    const handleAIAnalysis = async () => {
+        setIsLoadingAI(true);
+        try {
+            const { analyzeProductPerformance } = await import('../services/aiService');
+            // Safe product object
+            const safeProduct = {
+                ...product,
+                avgUnitPrice: product.avgUnitPrice || 0,
+                totalQuantity: product.totalQuantity || 0,
+                totalRevenue: product.totalRevenue || 0,
+                conversionRate: product.conversionRate || 0
+            }
+            const result = await analyzeProductPerformance(safeProduct);
+            setAiAnalysis(result);
+        } catch (error) { console.error(error); } finally { setIsLoadingAI(false); }
+    };
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between z-10">
+                    <h3 className="font-bold text-lg text-slate-900">Ürün Analizi</h3>
+                    <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5" /></button>
+                </div>
+                <div className="p-6 space-y-6">
+                    <div className="flex gap-4">
+                        <ProductImage src={product.imageUrl} name={product.productName} size="md" />
+                        <div><h4 className="font-semibold text-slate-900">{product.productName}</h4><p className="text-sm text-slate-500">{product.modelKodu}</p></div>
                     </div>
-                ))}
-                {products.length === 0 && (
-                    <p className="px-4 py-6 text-center text-slate-400 text-sm">Veri yok</p>
-                )}
+                    <div className="grid grid-cols-4 gap-3">
+                        <MetricCard label="Görüntülenme" value={formatNumber(product.totalImpressions || 0)} icon={Eye} />
+                        <MetricCard label="Sepete Ekleme" value={formatNumber(product.totalAddToCart || 0)} icon={ShoppingCart} />
+                        <MetricCard label="Satış" value={formatNumber(product.totalQuantity || 0)} icon={Target} />
+                        <MetricCard label="Ciro" value={formatCurrency(product.totalRevenue || 0)} icon={DollarSign} />
+                    </div>
+                    {!aiAnalysis && (
+                        <button onClick={handleAIAnalysis} disabled={isLoadingAI} className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-medium hover:from-indigo-600 hover:to-purple-700 transition-all flex items-center justify-center gap-2">
+                            {isLoadingAI ? 'Analiz Ediliyor...' : 'Yapay Zeka Yorumu Al'}
+                        </button>
+                    )}
+                    {aiAnalysis && (
+                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-5">
+                            <h5 className="font-bold text-indigo-900 mb-2">✨ Yapay Zeka Analizi</h5>
+                            <p className="text-indigo-800 mb-4 text-sm">{aiAnalysis.analysis}</p>
+                            <div className="space-y-2">
+                                <p className="text-xs font-bold text-indigo-500 uppercase">Aksiyonlar</p>
+                                {aiAnalysis.actionable_steps.map((step, idx) => (
+                                    <div key={idx} className="flex items-start gap-2 text-sm text-indigo-900"><span className="w-5 h-5 bg-indigo-200 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">{idx + 1}</span>{step}</div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

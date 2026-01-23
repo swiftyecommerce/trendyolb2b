@@ -3,8 +3,61 @@ import { ShoppingCart, Trash2, Minus, Plus, FileDown, X, Package, FileText, Exte
 import { useAnalytics } from '../context/AnalyticsContext';
 import { formatCurrency, formatNumber } from '../lib/excelParser';
 
+const QuantityInput: React.FC<{
+  value: number;
+  onChange: (val: number) => void;
+}> = ({ value, onChange }) => {
+  const [localValue, setLocalValue] = React.useState<string>(value.toString());
+
+  React.useEffect(() => {
+    setLocalValue(value.toString());
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setLocalValue(val);
+
+    if (val === '') return; // Don't update parent if empty
+
+    const numVal = Number(val);
+    if (!isNaN(numVal)) {
+      onChange(numVal);
+    }
+  };
+
+  const handleBlur = () => {
+    if (localValue === '' || isNaN(Number(localValue))) {
+      setLocalValue(value.toString()); // Revert to valid value on blur if invalid
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center gap-2">
+      <button
+        onClick={() => onChange(value - 1)}
+        className="p-1 bg-slate-100 rounded hover:bg-slate-200 transition-colors"
+      >
+        <Minus className="w-4 h-4 text-slate-600" />
+      </button>
+      <input
+        type="number"
+        value={localValue}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        className="w-16 text-center border border-slate-200 rounded-lg py-1 text-sm"
+      />
+      <button
+        onClick={() => onChange(value + 1)}
+        className="p-1 bg-slate-100 rounded hover:bg-slate-200 transition-colors"
+      >
+        <Plus className="w-4 h-4 text-slate-600" />
+      </button>
+    </div>
+  );
+};
+
 const CartView: React.FC = () => {
-  const { cart, removeFromCart, updateCartQuantity, clearCart } = useAnalytics();
+  const { cart, removeFromCart, updateCartQuantity, clearCart, state } = useAnalytics();
 
   const totalCost = cart.reduce((sum, item) => sum + item.totalCost, 0);
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -126,13 +179,13 @@ const CartView: React.FC = () => {
       color: #64748b;
       border-bottom: 2px solid #e2e8f0;
     }
-    th:last-child { text-align: right; }
+    th:last-child { text-align: center; }
     td { 
       padding: 16px 12px;
       border-bottom: 1px solid #e2e8f0;
       font-size: 14px;
     }
-    td:last-child { text-align: right; font-weight: 600; }
+    td:last-child { text-align: center; font-weight: 600; }
     .product-name { 
       font-weight: 600;
       color: #1e293b;
@@ -144,16 +197,6 @@ const CartView: React.FC = () => {
     }
     .text-right { text-align: right; }
     .text-center { text-align: center; }
-    .total-row { 
-      background: #4f46e5 !important; 
-      color: white;
-    }
-    .total-row td { 
-      padding: 20px 12px;
-      font-size: 16px;
-      font-weight: 700;
-      border: none;
-    }
     .footer {
       margin-top: 40px;
       padding-top: 20px;
@@ -189,10 +232,6 @@ const CartView: React.FC = () => {
       <div class="summary-label">Toplam Adet</div>
       <div class="summary-value">${totalItems.toLocaleString('tr-TR')}</div>
     </div>
-    <div class="summary-item">
-      <div class="summary-label">Toplam Tutar</div>
-      <div class="summary-value">${formatCurrency(totalCost)}</div>
-    </div>
   </div>
   
   <table>
@@ -201,8 +240,6 @@ const CartView: React.FC = () => {
         <th style="width: 40px;">#</th>
         <th>Ürün</th>
         <th class="text-center" style="width: 100px;">Adet</th>
-        <th class="text-right" style="width: 120px;">Birim Fiyat</th>
-        <th class="text-right" style="width: 120px;">Toplam</th>
       </tr>
     </thead>
     <tbody>
@@ -214,15 +251,8 @@ const CartView: React.FC = () => {
             <div class="model-code">${item.modelKodu}</div>
           </td>
           <td class="text-center">${item.quantity.toLocaleString('tr-TR')}</td>
-          <td class="text-right">${item.unitCost ? formatCurrency(item.unitCost) : '—'}</td>
-          <td class="text-right">${formatCurrency(item.totalCost)}</td>
         </tr>
       `).join('')}
-      <tr class="total-row">
-        <td colspan="3"></td>
-        <td class="text-right">TOPLAM</td>
-        <td class="text-right">${formatCurrency(totalCost)}</td>
-      </tr>
     </tbody>
   </table>
   
@@ -308,81 +338,69 @@ const CartView: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {cart.map(item => (
-                  <tr key={item.modelKodu} className="border-t border-slate-100 hover:bg-slate-50">
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        {item.imageUrl ? (
-                          <img
-                            src={item.imageUrl}
-                            alt={item.productName}
-                            className="w-12 h-12 object-cover rounded-lg"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
-                            <Package className="w-6 h-6 text-slate-400" />
-                          </div>
-                        )}
-                        <div>
-                          <p className="font-medium text-slate-900 line-clamp-1">{item.productName}</p>
-                          <div className="flex items-center gap-1">
-                            <p className="text-xs text-slate-500">{item.modelKodu}</p>
-                            {item.productUrl && (
-                              <a
-                                href={item.productUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-indigo-500 hover:text-indigo-600"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-                            )}
+                {cart.map(item => {
+                  const product = state.products.find(p => p.modelKodu === item.modelKodu);
+                  const productUrl = item.productUrl || product?.productUrl;
+
+                  return (
+                    <tr key={item.modelKodu} className="border-t border-slate-100 hover:bg-slate-50">
+                      <td className="p-4">
+                        <div className="flex items-center gap-3">
+                          {item.imageUrl ? (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.productName}
+                              className="w-12 h-12 object-cover rounded-lg"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
+                              <Package className="w-6 h-6 text-slate-400" />
+                            </div>
+                          )}
+                          <div>
+                            <p className="font-medium text-slate-900 line-clamp-1">{item.productName}</p>
+                            <div className="flex items-center gap-1">
+                              <p className="text-xs text-slate-500">{item.modelKodu}</p>
+                              {productUrl && (
+                                <a
+                                  href={productUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-indigo-500 hover:text-indigo-600"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => updateCartQuantity(item.modelKodu, item.quantity - 1)}
-                          className="p-1 bg-slate-100 rounded hover:bg-slate-200 transition-colors"
-                        >
-                          <Minus className="w-4 h-4 text-slate-600" />
-                        </button>
-                        <input
-                          type="number"
+                      </td>
+                      <td className="p-4">
+                        <QuantityInput
                           value={item.quantity}
-                          onChange={(e) => updateCartQuantity(item.modelKodu, Number(e.target.value))}
-                          className="w-16 text-center border border-slate-200 rounded-lg py-1 text-sm"
+                          onChange={(val) => updateCartQuantity(item.modelKodu, val)}
                         />
+                      </td>
+                      <td className="p-4 text-right text-slate-600">
+                        {item.unitCost ? formatCurrency(item.unitCost) : '—'}
+                      </td>
+                      <td className="p-4 text-right font-semibold text-slate-900">
+                        {formatCurrency(item.totalCost)}
+                      </td>
+                      <td className="p-4 text-center">
                         <button
-                          onClick={() => updateCartQuantity(item.modelKodu, item.quantity + 1)}
-                          className="p-1 bg-slate-100 rounded hover:bg-slate-200 transition-colors"
+                          onClick={() => removeFromCart(item.modelKodu)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         >
-                          <Plus className="w-4 h-4 text-slate-600" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
-                      </div>
-                    </td>
-                    <td className="p-4 text-right text-slate-600">
-                      {item.unitCost ? formatCurrency(item.unitCost) : '—'}
-                    </td>
-                    <td className="p-4 text-right font-semibold text-slate-900">
-                      {formatCurrency(item.totalCost)}
-                    </td>
-                    <td className="p-4 text-center">
-                      <button
-                        onClick={() => removeFromCart(item.modelKodu)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
